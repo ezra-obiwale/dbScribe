@@ -1,0 +1,17 @@
+{
+    "name": "dscribe/dbscribe",
+    "type": "library",
+    "description": "PDO Abstraction Library to manage CRUD functions from within PHP",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ezra Obiwale",
+            "email": "contact@ezraobiwale.com",
+            "homepage": "http://ezraobiwale.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0"
+    }
+}

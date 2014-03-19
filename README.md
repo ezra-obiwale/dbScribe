@@ -1,4 +1,4 @@
 DBScribe
 ========
 
-PDO Abstraction Classes to manage CRUD functions from within PHP
+PDO Abstraction Library to manage CRUD functions from within PHP
