@@ -1,5 +1,5 @@
 {
-    "name": "dscribe/dbscribe",
+    "name": "d-scribe/d-b-scribe",
     "type": "library",
     "description": "PDO Abstraction Library to manage CRUD functions from within PHP",
     "license": "MIT",
