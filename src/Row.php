@@ -173,26 +173,28 @@ class Row {
                     }
 
                     $column = Util::_toCamel($relationships['column']);
-
-                    if (property_exists($this, $column) && !empty($this->{$column})) {
+// problematic area below: use 'front' and 'back' here
+//                    die(print_r($relationships));
+                    if (property_exists($this, $column) && !$relationships['back']) {
                         $where = $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column});
                         break;
                     }
                 }
             }
-            else if (isset($args['relateWhere']) && is_array($args['relateWhere'])) { //
+            else if (isset($args['relateWhere']) && is_array($args['relateWhere'])) {
                 $where = $args['relateWhere'];
             }
-            
+
             $this->by = null;
             if (empty($where))
                 return new ArrayCollection;
-            
+
+            // check joined tables' results
             if ($this->_table) {
                 $compressed = Util::compressArray($where);
-                $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args));
+                $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args), $args);
             }
-
+            // select from required table if not joined
             if (!$return) {
                 if ($this->connection === null)
                     return null;
@@ -216,7 +218,7 @@ class Row {
      * @param array $callArgs
      * @return \DBScribe\Table
      */
-    private function prepSelectRelTable(Table $relTable, array $callArgs) {
+    private function prepSelectRelTable(Table &$relTable, array $callArgs) {
         if ((isset($callArgs[0]) && is_array($callArgs[0]))) {
             if (isset($callArgs[0]['limit']) && is_array($callArgs[0]['limit'])) {
                 if (isset($callArgs[0]['limit']['count'])) {
@@ -228,16 +230,24 @@ class Row {
                     }
                 }
             }
+
             if (isset($callArgs[0]['orderBy'])) {
-                if (is_array($callArgs[0]['orderBy']) && isset($callArgs[0]['orderBy']['column'])) {
-                    if (isset($callArgs[0]['orderBy']['direction'])) {
-                        $relTable->orderBy($callArgs[0]['orderBy']['column'], $callArgs[0]['orderBy']['direction']);
-                    }
-                    else {
-                        $relTable->orderBy($callArgs[0]['orderBy']['column']);
+                if (is_array($callArgs[0]['orderBy'])) {
+                    foreach ($callArgs[0]['orderBy'] as $orderBy) {
+                        if (is_array($orderBy) && isset($orderBy['column'])) {
+                            if (isset($orderBy['direction'])) {
+                                $relTable->orderBy($orderBy['column'], $orderBy['direction']);
+                            }
+                            else {
+                                $relTable->orderBy($orderBy['column']);
+                            }
+                        }
+                        else if (!is_array($orderBy)) {
+                            $relTable->orderBy($orderBy);
+                        }
                     }
                 }
-                else if (!is_array($callArgs[0]['orderBy'])) {
+                else {
                     $relTable->orderBy($callArgs[0]['orderBy']);
                 }
             }

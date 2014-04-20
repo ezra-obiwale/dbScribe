@@ -54,6 +54,7 @@ class Table {
     protected $customWhere;
     protected $where;
     protected $relationshipData;
+    protected $cache;
 
     /**
      * Used with customWhere(). No relationship with join()
@@ -92,9 +93,20 @@ class Table {
         $this->dropIndexes = array();
         $this->alterReferences = array();
 
-        $this->defineRelationships();
+        $this->init();
     }
 
+    /**
+     * Fetches the connection used in the table
+     * @return Connection
+     */
+    public function getConnection() {
+        return $this->connection;
+    }
+
+    /**
+     * Initialiazes the table
+     */
     public function init() {
         if ($this->connection)
             $this->defineRelationships();
@@ -211,7 +223,8 @@ class Table {
      * @return \DBScribe\Table
      */
     public function addIndex($columnName, $type = Table::INDEX_REGULAR) {
-        $this->newIndexes[$columnName] = $type;
+        if (!in_array($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newI))
+            $this->newIndexes[$columnName] = $type;
         return $this;
     }
 
@@ -475,7 +488,8 @@ class Table {
      */
     private function fetchColumns() {
         $qry = 'SELECT c.column_name as colName, c.column_default as colDefault,
-			c.is_nullable as nullable, c.column_type as colType, c.extra, c.column_key as colKey';
+			c.is_nullable as nullable, c.column_type as colType, c.extra, c.column_key as colKey,
+                        c.character_set_name as charset, c.collation_name as collation';
         $qry .=' FROM INFORMATION_SCHEMA.COLUMNS c
 			WHERE c.table_schema="' . $this->connection->getDBName() . '" AND c.table_name="' . $this->name . '"';
 
@@ -489,6 +503,14 @@ class Table {
                 $this->indexes[] = $column['colName'];
             }
         }
+    }
+
+    public function getContraintName($column) {
+        if (array_key_exists($column, $this->references)) {
+            return $this->references[$column]['constraintName'];
+        }
+
+        return null;
     }
 
     /**
@@ -520,18 +542,20 @@ class Table {
     public function insert(array $values) {
         if (!$this->checkReady())
             return false;
+
         $this->current = self::OP_INSERT;
         $this->query = 'INSERT INTO `' . $this->name . '` (';
         $columns = array();
         $noOfColumns = 0;
-        foreach ($values as $ky => $row) {
+        foreach (array_values($values) as $ky => $row) {
             $rowArray = $this->checkModel($row, true);
             if ($ky === 0)
                 $noOfColumns = count($rowArray);
 
-            if (count($rowArray) !== $noOfColumns)
+            if (count($rowArray) !== $noOfColumns) {
                 throw new \Exception('All rows must have the same number of columns in table "' . $this->name .
                 '". Set others as null');
+            }
 
             if (count($rowArray) === 0)
                 throw new \Exception('You cannot insert an empty row into table "' . $this->name . '"');
@@ -682,7 +706,6 @@ class Table {
             $row->setTable($this);
             $rows->append($row);
         }
-
         return $rows;
     }
 
@@ -738,6 +761,7 @@ class Table {
      */
     private function processJoins() {
         $this->joinQuery = '';
+        $superStart = false;
         foreach ($this->joins as $table => $options) {
             if (!$relationship = $this->rowModel->getRelationship($table))
                 continue;
@@ -748,18 +772,25 @@ class Table {
             $this->query .= ', ' . $this->prepareColumns($table, ($table->getName() == $this->name) ? 't' : null);
 
             $this->joinQuery .= ' LEFT OUTER JOIN `' . $table->getName() . '`' .
-                    (($table->getName() == $this->name) ? ' t' : null) . ' ON ';
+                    (($table->getName() == $this->name) ? ' t' : null);
 
             $started = false;
             foreach ($relationship as $ky => $rel) {
-//                if (!$rel['back'])
-//                    continue;
+                if (($rel['back'] && !@$options['back']) || (!$rel['back'] && isset($options['front']) && !$options['front']))
+                    continue;
                 if ($ky && $started)
                     $this->joinQuery .= 'OR ';
+                if (!$started)
+                    $this->joinQuery .= ' ON ';
                 $started = true;
+                $superStart = true;
                 $this->joinQuery .= '`' . $this->name . '`.`' . $rel['column'] . '` = ' . (($table->getName() == $this->name) ? 't' : '`' . $table->getName() . '`') . '.`' . $rel['refColumn'] . '` ';
             }
         }
+
+        if ($this->joinQuery && !$superStart)
+            throw new \Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
+
         $this->joins = array();
     }
 
@@ -768,9 +799,10 @@ class Table {
      * @param string $tableName
      * @param array $columns Key to value of column to value
      * @param \DBScribe\Row $object
+     * @param array $options
      * @return \DBScribe\ArrayCollection
      */
-    final public function seekJoin($tableName, array $columns, Row $object = null) {
+    final public function seekJoin($tableName, array $columns, Row $object = null, array $options = array()) {
         if (!$this->joinQuery)
             return false;
 
@@ -779,7 +811,8 @@ class Table {
         if (!$object) {
             $object = new Row();
         }
-        $return = new ArrayCollection();
+
+        $array = array();
         foreach ($this->relationshipData as $data) {
             foreach ($columns as $column => $value) {
                 $compare = $prefix . $column;
@@ -789,11 +822,66 @@ class Table {
                     foreach ($data as $col => $val) {
                         $d[str_replace($prefix, '', $col)] = $val;
                     }
-                    $return->add($object->populate($d));
+
+                    $ob = clone $object;
+
+                    $array[] = $ob->populate($d);
                 }
             }
         }
-        return $return;
+
+        $this->parseWithOptions($array, $options);
+
+        return count($array) ? new ArrayCollection($array) : false;
+    }
+
+    private function parseWithOptions(array &$array, array $options) {
+        if (isset($options[0]['orderBy'])) {
+            usort($array, function($a, $b) use($options) {
+                if (is_array($options[0]['orderBy'])) {
+                    foreach ($options[0]['orderBy'] as $order) {
+                        $comp = is_array($order) ?
+                                $this->compareOrder($order['position'], $a, $b) :
+                                $this->compareOrder($order, $a, $b);
+                        if ($comp) {
+                            return $comp;
+                        }
+                    }
+                }
+                else {
+                    return $this->compareOrder($options[0]['orderBy'], $a, $b);
+                }
+            });
+        }
+
+        $array = array_values($array);
+
+        if (isset($options[0]['limit'])) {
+            if (!isset($options[0]['limit']['start'])) {
+                $options[0]['limit']['start'] = 0;
+            }
+            if (!isset($options[0]['limit']['count'])) {
+                $options[0]['limit']['count'] = count($array) - (int) $options['0']['limit']['start'];
+            }
+
+            $array = array_slice($array, $options[0]['limit']['start'], $options[0]['limit']['count']);
+        }
+
+        return $array;
+    }
+
+    private function compareOrder($order, $a, $b) {
+        $method = 'get' . ucfirst($order);
+        if (method_exists($a, $method)) {
+            $value1 = $a->$method();
+            $value2 = $b->$method();
+        }
+        else {
+            $value1 = $a->$order;
+            $value2 = $b->$order;
+        }
+
+        return strcmp($value1, $value2);
     }
 
     /**
@@ -867,6 +955,10 @@ class Table {
         if (!is_array($whereColumn))
             $whereColumn = array($whereColumn);
 
+        foreach ($whereColumn as &$col) {
+            $col = Util::camelTo_($col);
+        }
+
         $nColumns = 0;
         $columns = array();
         foreach ($values as $ky => $row) {
@@ -921,6 +1013,8 @@ class Table {
 
         $this->query .= ' WHERE ';
         foreach ($whereColumn as $key => $where) {
+            $where = Util::camelTo_($where);
+
             if ($key)
                 $this->query .= ' AND ';
             $this->query .= '`' . $where . '`=:' . $where;
@@ -934,6 +1028,12 @@ class Table {
         return $this->execute();
     }
 
+    /**
+     * Updates rows that exist and creates those that don't
+     * @param array $values
+     * @param string|integer|array $whereColumn
+     * @return boolean
+     */
     public function upsert(array $values, $whereColumn = 'id') {
         $select = $existing = array();
         if (!is_array($whereColumn))
@@ -977,13 +1077,14 @@ class Table {
                 $insert[] = $vals;
             }
         }
+
         if (!empty($update)) {
             $return = $this->update($update, $whereColumn)->execute();
         }
-        if (!empty($insert)) {
-            $this->insert(array_values($insert))->execute();
+        if ((($update && $return) || !$update) && !empty($insert)) {
+            $return = $this->insert(array_values($insert))->execute();
         }
-        return true;
+        return $return;
     }
 
     /**

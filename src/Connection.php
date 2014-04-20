@@ -269,8 +269,8 @@ class Connection extends \PDO {
             foreach ($table->getDropReferences() as $columnName) {
                 $refs = $table->getReferences();
 
-                if (isset($refs[$columnName])) {
-                    $qry .= $alter . ' DROP FOREIGN KEY `' . $refs[$columnName]->constraintName . '`; ';
+                if (isset($refs[$columnName]) && !empty($refs[$columnName]['constraintName'])) {
+                    $qry .= $alter . ' DROP FOREIGN KEY `' . $refs[$columnName]['constraintName'] . '`; ';
                 }
 
                 $cnt++;
@@ -281,17 +281,17 @@ class Connection extends \PDO {
             $qry .= $alter;
 
             $cnt = 1;
+            $iQry = '';
             foreach ($table->getDropIndexes() as $column) {
                 if (in_array($column, $table->getIndexes())) {
-                    $qry .= ' DROP INDEX `' . $column . '`';
-
-                    if ($cnt < count($table->getDropIndexes()))
-                        $qry .= ', ';
+                    if ($iQry)
+                        $iQry .= ',';
+                    $iQry .= ' DROP INDEX `' . $column . '`';
                 }
                 $cnt++;
             }
 
-            $qry .= ';';
+            $qry .= $iQry . ';';
         }
 
         if (count($table->getDropColumns())) {
@@ -381,10 +381,7 @@ class Connection extends \PDO {
         // need to add index to the referenced column before can add as foreign key
         if (count($table->getNewReferences())) {
             foreach ($table->getNewReferences() as $column => $desc) {
-                if (!in_array($column, $table->getColumns(true)))
-                    continue;
-
-                $qry .= ' ' . $alter . " ADD CONSTRAINT " . $column .
+                $qry .= ' ' . $alter . " ADD" .
                         " FOREIGN KEY (`{$column}`) REFERENCES `" . $this->dbName . '`.`' . $this->tablePrefix .
                         $desc['table'] . "` (`" . $desc['column'] .
                         "`) ON DELETE {$desc["onDelete"]} ON UPDATE {$desc["onUpdate"]}; ";
@@ -401,11 +398,11 @@ class Connection extends \PDO {
         $cnt = 1;
         foreach ($columns as $column => $desc) {
             if (!in_array($column, $table->getColumns(true))) {
+                if ($qry)
+                    $qry .= ',';
                 $qry .= ' ADD COLUMN `' . $column . '` ' . $desc;
                 if ($column == $table->getNewPrimarykey())
                     $qry .= ' FIRST';
-                if ($cnt < count($table->getNewColumns()))
-                    $qry .= ', ';
             }
             $cnt++;
         }
@@ -491,7 +488,8 @@ class Connection extends \PDO {
                 $rowModel->setConnection($this);
                 $return = $stmt->fetchAll(\PDO::FETCH_ASSOC);
                 return $return;
-            } else {
+            }
+            else {
                 if (count($return) > 1) {
                     return $return;
                 }
