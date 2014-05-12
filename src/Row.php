@@ -2,7 +2,7 @@
 
 namespace DBScribe;
 
-class Row {
+class Row implements \JsonSerializable {
 
     private $connection;
     private $relationships = array();
@@ -60,7 +60,7 @@ class Row {
      * Returns an array copy of the properties of the row and their values
      * @return array
      */
-    public function toArray($true = false, $and = false, $not = false) {
+    public function toArray() {
         $ppts = get_object_vars($this);
         unset($ppts['connection']);
         unset($ppts['relationships']);
@@ -144,13 +144,18 @@ class Row {
     /**
      * Allow calling related tables
      * @param string $name
-     * @param array $args
+     * @param array $args Array of options::
+     *      push - Fetch rows where the current table is being referenced [PUSH ONTO CALLERS]
+     *      pull - Fetch rows referenced by current table [PULL INTO CURRENT]
+     *      model- Model to parse the returned rows into
+     *      limit- Limit the number of rows to fetch @see Table::limit()
+     *      orderBy- Sort the fetched rows @see Table::orderBy()
      * @return null
      */
     final public function __call($name, $args) {
         if (NULL !== $return = $this->_call($name, $args))
             return $return;
-
+        
         if (!method_exists($this, $name)) {
             $_name = Util::camelTo_($name);
             if (substr($name, 0, 2) == 'by') {
@@ -173,9 +178,10 @@ class Row {
                     }
 
                     $column = Util::_toCamel($relationships['column']);
-// problematic area below: use 'front' and 'back' here
-//                    die(print_r($relationships));
-                    if (property_exists($this, $column) && !$relationships['back']) {
+                    if (isset($args[0]['push']) && $args[0]['push'] && !$relationships['push'] ||
+                            isset($args[0]['pull']) && $args[0]['pull'] && $relationships['push'])
+                        continue;
+                    if (property_exists($this, $column)) {
                         $where = $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column});
                         break;
                     }
@@ -188,7 +194,7 @@ class Row {
             $this->by = null;
             if (empty($where))
                 return new ArrayCollection;
-
+            
             // check joined tables' results
             if ($this->_table) {
                 $compressed = Util::compressArray($where);
@@ -373,6 +379,10 @@ class Row {
      */
     public function getTable() {
         return $this->_table;
+    }
+
+    public function jsonSerialize() {
+        return $this->toArray();
     }
 
 }

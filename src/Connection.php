@@ -160,7 +160,7 @@ class Connection extends \PDO {
 
         $qry .= "CREATE TABLE IF NOT EXISTS `" . $this->tablePrefix . $table->getName() . "` (";
 
-        $newColumns = $table->getNewColumns();
+        $newColumns = $table->getNewColumns(true);
         if ($table->getNewPrimarykey() && array_key_exists($table->getNewPrimarykey(), $newColumns)) {
             if (!is_string($table->getNewPrimarykey()) || !is_string($newColumns[$table->getNewPrimaryKey()])) {
                 throw new \Exception('Column names and information <b>MUST</b> both be strings for table "' .
@@ -189,7 +189,7 @@ class Connection extends \PDO {
         }
 
         if ($table->getNewPrimaryKey())
-            $qry .= ', PRIMARY KEY (`' . $table->getNewPrimaryKey() . '`)';
+            $qry .= ', PRIMARY KEY (`' . $table->getNewPrimaryKey(true) . '`)';
 
         if (count($table->getNewReferences()) > 0) {
             $qry .= ", ";
@@ -209,7 +209,7 @@ class Connection extends \PDO {
             $qry .= ', ';
 
             $cnt = 1;
-            foreach ($table->getNewIndexes() as $column => $type) {
+            foreach ($table->getNewIndexes(true) as $column => $type) {
                 if ($cnt > 1)
                     $qry .= ", ";
                 $qry .= $type . ' (`' . $column . '`)';
@@ -223,7 +223,7 @@ class Connection extends \PDO {
         $qry .= ") " . $table->getDescription() . "; ";
         if (count($table->getNewReferences()) > 0) {
             $alter = "ALTER TABLE `" . $this->tablePrefix . $table->getName() . "`";
-            foreach ($table->getNewReferences() as $column => $infoArray) {
+            foreach ($table->getNewReferences(true) as $column => $infoArray) {
                 $refTable = $infoArray['table'];
                 $refColumn = $infoArray['column'];
                 $dTable = $table->getName();
@@ -234,9 +234,8 @@ class Connection extends \PDO {
                     $dTable = \Util::_toCamel($table->getName());
                     $dColumn = ucfirst(\Util::_toCamel($column));
                 }
-                $qry .= ' ' . $alter . " ADD CONSTRAINT " . $dTable .
-                        $dColumn . '__' . $refTable . $refColumn .
-                        " FOREIGN KEY (`{$column}`) REFERENCES `" . $this->dbName . '`.`' . $this->tablePrefix .
+                $qry .= ' ' . $alter . " ADD FOREIGN KEY (`{$column}`) REFERENCES `" .
+                        $this->dbName . '`.`' . $this->tablePrefix .
                         $infoArray['table'] . "` (`" . $infoArray['column'] .
                         "`) ON DELETE {$infoArray["onDelete"]} ON UPDATE {$infoArray["onUpdate"]}; ";
             }
@@ -259,14 +258,14 @@ class Connection extends \PDO {
         $qry = '';
 
         if ($table->getNewDescription()) {
-            $qry .= $alter . ' ' . $table->getNewDescription() . ';';
+            $qry .= $alter . ' ' . $table->getNewDescription(true) . ';';
         }
 
         if (count($table->getDropReferences())) {
             $qry .= ' ';
 
             $cnt = 1;
-            foreach ($table->getDropReferences() as $columnName) {
+            foreach ($table->getDropReferences(true) as $columnName) {
                 $refs = $table->getReferences();
 
                 if (isset($refs[$columnName]) && !empty($refs[$columnName]['constraintName'])) {
@@ -282,7 +281,7 @@ class Connection extends \PDO {
 
             $cnt = 1;
             $iQry = '';
-            foreach ($table->getDropIndexes() as $column) {
+            foreach ($table->getDropIndexes(true) as $column) {
                 if (in_array($column, $table->getIndexes())) {
                     if ($iQry)
                         $iQry .= ',';
@@ -294,14 +293,15 @@ class Connection extends \PDO {
             $qry .= $iQry . ';';
         }
 
-        if (count($table->getDropColumns())) {
+        $dropColumns = $table->getDropColumns(true);
+        if (count($dropColumns)) {
             $qry .= ' ' . $alter;
 
             $cnt = 1;
-            foreach ($table->getDropColumns() as $column) {
+            foreach ($dropColumns as $column) {
                 if (in_array($column, $table->getColumns(true))) {
                     $qry .= ' DROP COLUMN `' . $column . '`';
-                    if ($cnt < count($table->getDropColumns()))
+                    if ($cnt < count($dropColumns))
                         $qry .= ', ';
                 }
                 $cnt++;
@@ -309,14 +309,14 @@ class Connection extends \PDO {
             $qry .= ';';
         }
 
-        if ($table->shouldDropPrimaryKey()) {
-            if (!in_array($table->getPrimaryKey(), $table->getDropColumns()))
+        if ($table->shouldDropPrimaryKey(true)) {
+            if (!in_array($table->getPrimaryKey(), $dropColumns))
                 $qry .= $alter . ' DROP PRIMARY KEY;';
         }
 
         if (count($table->getNewColumns())) {
             $qry .= ' ' . $alter;
-            $qry .= $this->addNewColumns($table->getNewColumns(), $table);
+            $qry .= $this->addNewColumns($table->getNewColumns(true), $table);
             $qry .= ';';
         }
 
@@ -326,12 +326,13 @@ class Connection extends \PDO {
             $addNew = array();
             $cnt = 1;
             $addQuery = false;
-            foreach ($table->getAlterColumns() as $column => $desc) {
+            $cols = $table->getAlterColumns(true);
+            foreach ($cols as $column => $desc) {
                 if (in_array($column, $table->getColumns(true))) {
                     $query .= ' CHANGE `' . $column . '` `' . $column . '` ' . $desc;
                     if ($column == $table->getNewPrimarykey())
                         $query .= ' PRIMARY KEY FIRST';
-                    if ($cnt < count($table->getAlterColumns()))
+                    if ($cnt < count($cols))
                         $query .= ', ';
                     $addQuery = true;
                 } else {
@@ -351,8 +352,8 @@ class Connection extends \PDO {
                 $qry .= $query;
         }
 
-        $newIndexesCount = count($table->getNewIndexes());
-        $newIndexes = $table->getNewIndexes();
+        $newIndexes = $table->getNewIndexes(true);
+        $newIndexesCount = count($newIndexes);
         if ($newIndexes)
             $indexColumns = array_keys($newIndexes);
         if ($newIndexesCount && ($newIndexesCount !== 1 || ($newIndexesCount === 1 && $indexColumns[0] !== $table->getNewPrimarykey()))) {
@@ -364,7 +365,7 @@ class Connection extends \PDO {
                     continue;
 
                 $qry .= ' ADD ' . $type . ' (`' . $column . '`)';
-                if ($cnt < count($table->getNewIndexes()))
+                if ($cnt < $newIndexesCount)
                     $qry .= ', ';
 
                 $cnt++;
@@ -375,19 +376,17 @@ class Connection extends \PDO {
 
         if ($table->getNewPrimaryKey()) {
             $qry .= ' ' . $alter . ' ADD PRIMARY KEY (`' .
-                    $table->getNewPrimarykey() . '`);';
+                    $table->getNewPrimarykey(true) . '`);';
         }
 
-        // need to add index to the referenced column before can add as foreign key
         if (count($table->getNewReferences())) {
-            foreach ($table->getNewReferences() as $column => $desc) {
-                $qry .= ' ' . $alter . " ADD" .
-                        " FOREIGN KEY (`{$column}`) REFERENCES `" . $this->dbName . '`.`' . $this->tablePrefix .
+            foreach ($table->getNewReferences(true) as $column => $desc) {
+                $qry .= ' ' . $alter . " ADD FOREIGN KEY (`{$column}`) REFERENCES `" .
+                        $this->dbName . '`.`' . $this->tablePrefix .
                         $desc['table'] . "` (`" . $desc['column'] .
                         "`) ON DELETE {$desc["onDelete"]} ON UPDATE {$desc["onUpdate"]}; ";
             }
         }
-//        die($qry);
         $return = $this->doPrepare($qry);
         $table->init();
         return $return;
@@ -409,8 +408,10 @@ class Connection extends \PDO {
         return $qry;
     }
 
-    private function exception(\Exception $ex, $qry) {
-        throw new \Exception($ex->getMessage() . '<p style="margin-top:20px;"><span style="font-style:italic;color:darkred;background-color:#fff">' . $qry . '</span></p>');
+    private function exception(\Exception $ex, $qry, $values) {
+        throw new \Exception($ex->getMessage() .
+        '<p style="margin-top:20px;"><span style="font-style:italic;color:darkred;background-color:#fff">' .
+        $qry . '</span></p><pre>' . print_r($values, true) . '</pre>');
     }
 
     /**
@@ -500,7 +501,7 @@ class Connection extends \PDO {
             }
         }
         catch (\PDOException $ex) {
-            $this->exception($ex, $query);
+            $this->exception($ex, $query, $values);
         }
     }
 

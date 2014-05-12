@@ -53,8 +53,11 @@ class Table {
     protected $current;
     protected $customWhere;
     protected $where;
+    protected $groups;
+    protected $having;
     protected $relationshipData;
     protected $cache;
+    protected $toJSON;
 
     /**
      * Used with customWhere(). No relationship with join()
@@ -70,12 +73,14 @@ class Table {
     public function __construct($name, Connection $connection = null, Row $rowModel = null) {
         $this->name = Util::camelTo_($name);
         $this->connection = $connection;
-        $this->rowModel = $rowModel;
+        $this->rowModel = ($rowModel) ? $rowModel : new Row();
         $this->multiple = false;
         $this->doPost = false;
         $this->withModel = false;
         $this->delayExecute = false;
+        $this->toJSON = false;
         $this->where = false;
+        $this->groups = array();
         $this->orderBy = array();
         $this->joins = array();
 
@@ -153,8 +158,11 @@ class Table {
      * Fetches the new description for the table
      * @return string|null
      */
-    public function getNewDescription() {
-        return $this->newDescription;
+    public function getNewDescription($reset = false) {
+        $return = $this->newDescription;
+        if ($reset)
+            $this->newDescription = null;
+        return $return;
     }
 
     /**
@@ -195,16 +203,22 @@ class Table {
      * Checks if to drop the primary key
      * @return boolean|null
      */
-    public function shouldDropPrimaryKey() {
-        return $this->dropPrimaryKey;
+    public function shouldDropPrimaryKey($reset = false) {
+        $return = $this->dropPrimaryKey;
+        if ($reset)
+            $this->dropPrimaryKey = false;
+        return $return;
     }
 
     /**
      * Fetches the new primary key
      * @return string|null
      */
-    public function getNewPrimarykey() {
-        return $this->newPrimaryKey;
+    public function getNewPrimarykey($reset = false) {
+        $return = $this->newPrimaryKey;
+        if ($reset)
+            $this->newPrimaryKey = null;
+        return $return;
     }
 
     /**
@@ -223,7 +237,7 @@ class Table {
      * @return \DBScribe\Table
      */
     public function addIndex($columnName, $type = Table::INDEX_REGULAR) {
-        if (!in_array($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newI))
+        if (!in_array($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newIndexes))
             $this->newIndexes[$columnName] = $type;
         return $this;
     }
@@ -232,8 +246,11 @@ class Table {
      * Fetches the indexes to create
      * @return array
      */
-    public function getNewIndexes() {
-        return $this->newIndexes;
+    public function getNewIndexes($reset = false) {
+        $return = $this->newIndexes;
+        if ($reset)
+            $this->newIndexes = array();
+        return $return;
     }
 
     /**
@@ -254,8 +271,11 @@ class Table {
      * Fetches the indexes to remove
      * @return array
      */
-    public function getDropIndexes() {
-        return $this->dropIndexes;
+    public function getDropIndexes($reset = false) {
+        $return = $this->dropIndexes;
+        if ($reset)
+            $this->dropIndexes = array();
+        return $return;
     }
 
     /**
@@ -294,16 +314,22 @@ class Table {
      * Fetches columns to remove
      * @return array
      */
-    public function getDropColumns() {
-        return $this->dropColumns;
+    public function getDropColumns($reset = false) {
+        $return = $this->dropColumns;
+        if ($reset)
+            $this->dropColumns = array();
+        return $return;
     }
 
     /**
      * Fetches columns to add
      * @return array
      */
-    public function getNewColumns() {
-        return $this->newColumns;
+    public function getNewColumns($reset = false) {
+        $return = $this->newColumns;
+        if ($reset)
+            $this->newColumns = array();
+        return $return;
     }
 
     /**
@@ -321,8 +347,11 @@ class Table {
      * Fetches the columns to change
      * @return array
      */
-    public function getAlterColumns() {
-        return $this->alterColumns;
+    public function getAlterColumns($reset = false) {
+        $return = $this->alterColumns;
+        if ($reset)
+            $this->alterColumns = array();
+        return $return;
     }
 
     /**
@@ -355,8 +384,11 @@ class Table {
      * Fetches all columns from which references should be dropped
      * @return array
      */
-    public function getDropReferences() {
-        return array_unique($this->dropReferences);
+    public function getDropReferences($reset = false) {
+        $return = array_unique($this->dropReferences);
+        if ($reset)
+            $this->dropReferences = array();
+        return $return;
     }
 
     /**
@@ -367,6 +399,7 @@ class Table {
      * @return \DBScribe\Table
      */
     public function addReference($columnName, $refTable, $refColumn, $onDelete = 'RESTRICT', $onUpdate = 'RESTRICT') {
+        $this->addIndex($columnName);
         $this->newReferences[$columnName] = array(
             'table' => $refTable,
             'column' => $refColumn,
@@ -380,8 +413,11 @@ class Table {
      * Fetches all new references
      * @return array
      */
-    public function getNewReferences() {
-        return $this->newReferences;
+    public function getNewReferences($reset = false) {
+        $return = $this->newReferences;
+        if ($reset)
+            $this->newReferences = array();
+        return $return;
     }
 
     /**
@@ -599,7 +635,7 @@ class Table {
             $relationships[$info['refTable']][] = array(
                 'column' => $columnName,
                 'refColumn' => $info['refColumn'],
-                'back' => false
+                'push' => false
             );
         }
         foreach ($this->backReferences as $columnName => $infoArray) {
@@ -609,7 +645,7 @@ class Table {
                 $relationships[$info['refTable']][] = array(
                     'column' => $columnName,
                     'refColumn' => $info['refColumn'],
-                    'back' => true,
+                    'push' => true,
                 );
             }
         }
@@ -649,64 +685,38 @@ class Table {
      * Selects rows from database
      * Many rows can be passed in as criteria
      * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
-     * @return \DBScribe\Table
+     * @return \DBScribe\Table|ArrayCollection
      */
-    public function select(array $criteria = array()) {
+    public function select(array $criteria = array(), $toJSON = false) {
         if (!$this->checkReady()) {
             return ($this->delayExecute) ? $this : new ArrayCollection();
         }
+        $this->toJSON = $toJSON;
 
         $this->setRowRelationships();
         $this->current = self::OP_SELECT;
 
         $this->query = 'SELECT ' . $this->prepareColumns();
-        $this->processJoins();
         $this->query .= ' FROM `' . $this->name . '`' . $this->joinQuery;
         $this->queryWhere($criteria);
 
+        if ($this->groups) {
+            $this->query .= ' GROUP BY ';
+            foreach ($this->groups as $ky => $column) {
+                if ($ky)
+                    $this->query .= ', ';
+                $this->query .= '`' . $this->name . '`.`' . $column . '`';
+            }
+        }
+
+        if ($this->having) {
+            $this->query .= ' HAVING ' . $this->having;
+        }
         $this->withModel = true;
         if ($this->delayExecute) {
             return $this;
         }
         return $this->execute();
-    }
-
-    private function returnSelect($return) {
-        $forThis = $this->relationshipData = array();
-        foreach ($return as &$ret) {
-            $imm = array();
-            foreach ($this->getColumns(true) as $col) {
-                $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
-                unset($ret[Util::_toCamel($col)]);
-            }
-            if ($this->getPrimaryKey()) {
-                $forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
-            }
-            else
-                $forThis[] = $imm;
-
-            if (!empty($ret)) {
-                $this->relationshipData[] = $ret;
-            }
-        }
-        return $this->createReturnModels($forThis);
-    }
-
-    private function createReturnModels(array $forThis) {
-        $rows = new ArrayCollection();
-        foreach ($forThis as $valueArray) {
-            $row = clone $this->rowModel;
-            foreach ($valueArray as $name => $value) {
-                if (method_exists($row, 'set' . $name))
-                    $row->{'set' . $name}($value);
-                else
-                    $row->{$name} = $value;
-            }
-            $row->postFetch();
-            $row->setTable($this);
-            $rows->append($row);
-        }
-        return $rows;
     }
 
     private function queryWhere(array $criteria) {
@@ -722,14 +732,60 @@ class Table {
             $rowArray = $this->checkModel($row);
             $cnt = 1;
             foreach ($rowArray as $column => $value) {
-                $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` = ?';
-                if (count($rowArray) > $cnt)
-                    $this->query .= ' AND ';
-                $this->values[] = $value;
+                if (!is_array($value)) {
+                    $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` = ?';
+                    if (count($rowArray) > $cnt)
+                        $this->query .= ' AND ';
+                    $this->values[] = $value;
+                }
+                else {
+                    $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` IN (\'' . join('\', \'', $value) . '\')';
+                }
                 $cnt++;
             }
             $this->query .= ')';
         }
+    }
+
+    private function returnSelect($return) {
+        $forThis = $this->relationshipData = array();
+        foreach ($return as &$ret) {
+            $imm = array();
+            foreach ($this->getColumns(true) as $col) {
+                $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
+                unset($ret[Util::_toCamel($col)]);
+            }
+
+            if ($this->getPrimaryKey() && !empty($imm[Util::_toCamel($this->getPrimaryKey())])) {
+                $forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
+            }
+            else
+                $forThis[] = $imm;
+
+            if (!empty($ret)) {
+                $this->relationshipData[] = $ret;
+            }
+        }
+        return $this->createReturnModels($forThis);
+    }
+
+    private function createReturnModels(array $forThis) {
+        $rows = new ArrayCollection();
+
+        foreach ($forThis as $valueArray) {
+            $row = clone $this->rowModel;
+            foreach ($valueArray as $name => $value) {
+                if (method_exists($row, 'set' . $name))
+                    $row->{'set' . $name}($value);
+                else
+                    $row->{$name} = $value;
+            }
+            $row->postFetch();
+            $row->setTable($this);
+            $rows->append($row);
+        }
+
+        return $rows;
     }
 
     /**
@@ -746,6 +802,16 @@ class Table {
         return $this;
     }
 
+    public function groupBy(array $columnNames) {
+        $this->groups = array_merge($this->groups, $columnNames);
+        return $this;
+    }
+
+    public function having($condition) {
+        $this->having = $condition;
+        return $this;
+    }
+
     /**
      * Joins with the given table
      * @param string|Table $table
@@ -756,9 +822,6 @@ class Table {
         return $this;
     }
 
-    /**
-     * @todo check which of relationship (back|normal) to use when joining
-     */
     private function processJoins() {
         $this->joinQuery = '';
         $superStart = false;
@@ -776,8 +839,9 @@ class Table {
 
             $started = false;
             foreach ($relationship as $ky => $rel) {
-                if (($rel['back'] && !@$options['back']) || (!$rel['back'] && isset($options['front']) && !$options['front']))
+                if (($rel['push'] && isset($options['pull']) && @$options['push']) || (!$rel['push'] && isset($options['pull']) && !$options['pull']))
                     continue;
+
                 if ($ky && $started)
                     $this->joinQuery .= 'OR ';
                 if (!$started)
@@ -785,6 +849,13 @@ class Table {
                 $started = true;
                 $superStart = true;
                 $this->joinQuery .= '`' . $this->name . '`.`' . $rel['column'] . '` = ' . (($table->getName() == $this->name) ? 't' : '`' . $table->getName() . '`') . '.`' . $rel['refColumn'] . '` ';
+
+                if (isset($options['where'])) {
+                    foreach ($options['where'] as $column => $value) {
+                        $this->joinQuery .= 'AND `' . $table->getName() . '`.`' . Util::camelTo_($column) . '` = ? ';
+                        $this->values[] = $value;
+                    }
+                }
             }
         }
 
@@ -792,6 +863,8 @@ class Table {
             throw new \Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
 
         $this->joins = array();
+
+        return $this->joinQuery;
     }
 
     /**
@@ -917,9 +990,9 @@ class Table {
      */
     public function count($column = '*', $criteria = array()) {
         $this->query = 'SELECT COUNT(' . Util::camelTo_($column) . ') as rows FROM `' . $this->name . '`';
-
         $this->queryWhere($criteria);
 
+        $this->withModel = false;
         if ($ret = $this->execute()) {
             return ($ret) ? $ret[0]['rows'] : 0;
         }
@@ -929,12 +1002,27 @@ class Table {
     /**
      * Gets the distinct values of a column
      * @param string $column
+     * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
      * @return ArrayCollection
      */
-    public function distinct($column) {
+    public function distinct($column, array $criteria = array()) {
         $this->current = self::OP_SELECT;
         $this->withModel = true;
-        $this->query = 'SELECT DISTINCT(' . Util::camelTo_($column) . ') FROM `' . $this->name . '`';
+        $this->query = 'SELECT DISTINCT `' . $this->name . '`.`' . Util::camelTo_($column) . '` FROM `' . $this->name . '` ' . $this->joinQuery;
+        $this->queryWhere($criteria);
+
+        if ($this->groups) {
+            $this->query .= ' GROUP BY ';
+            foreach ($this->groups as $ky => $column) {
+                if ($ky)
+                    $this->query .= ', ';
+                $this->query .= '`' . $this->name . '`.`' . $column . '`';
+            }
+        }
+
+        if ($this->having) {
+            $this->query .= ' HAVING ' . $this->having;
+        }
         return $this->execute();
     }
 
@@ -1040,9 +1128,10 @@ class Table {
             $whereColumn = array($whereColumn);
 
         foreach ($values as $ky => &$vals) {
-            $vals = $this->checkModel($vals);
+            $val = $this->checkModel($vals);
+            $vals = $this->checkModel($vals, true);
             foreach ($whereColumn as $column) {
-                $select[$ky][$column] = $vals[$column];
+                $select[$ky][$column] = $val[$column];
             }
         }
         foreach ($this->select($select)->execute() as $row) {
@@ -1079,10 +1168,10 @@ class Table {
         }
 
         if (!empty($update)) {
-            $return = $this->update($update, $whereColumn)->execute();
+            $return = $this->update($update, $whereColumn);
         }
         if ((($update && $return) || !$update) && !empty($insert)) {
-            $return = $this->insert(array_values($insert))->execute();
+            $return = $this->insert(array_values($insert));
         }
         return $return;
     }
@@ -1202,30 +1291,41 @@ class Table {
             'multipleRows' => $this->multiple,
             'model' => $model
         ));
+
+        $current = $this->current;
+        $toJson = $this->toJSON;
+        $this->resetQuery();
+
+        $forJson = array($result);
+
+        if ($this->doPost) {
+//			return $this->rowModelInUse->postSave($this->doPost, $result, $this->lastInsertId());
+        }
+        if ($current === self::OP_SELECT && is_bool($result)) {
+            $result = new ArrayCollection();
+            $forJson = array();
+        }
+        elseif ($current === self::OP_SELECT && is_array($result)) {
+            $result = $this->returnSelect($result);
+            $forJson = $result->getArrayCopy();
+        }
+
+        return ($toJson) ? json_encode($forJson) : $result;
+    }
+
+    private function resetQuery() {
         $this->query = null;
         $this->values = null;
         $this->orderBy = array();
         $this->limit = null;
         $this->customWhere = null;
         $this->where = false;
-
-        $current = $this->current;
+        $this->having = null;
+        $this->groups = array();
         $this->current = null;
-
         $this->multiple = false;
         $this->withModel = false;
-
-        if ($this->doPost) {
-//			return $this->rowModelInUse->postSave($this->doPost, $result, $this->lastInsertId());
-        }
-        if ($current === self::OP_SELECT && is_bool($result)) {
-            return new ArrayCollection();
-        }
-        elseif ($current === self::OP_SELECT && is_array($result)) {
-            return $this->returnSelect($result);
-        }
-
-        return $result;
+        $this->toJSON = false;
     }
 
     public function lastInsertId() {
