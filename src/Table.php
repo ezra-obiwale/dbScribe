@@ -3,9 +3,10 @@
 namespace DBScribe;
 
 /**
- * Description of Table
- *
- * @author topman
+ * This holds all information concerning a database table and methods to operate
+ * on the table and it's columns and rows
+ * 
+ * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 class Table {
 
@@ -18,46 +19,232 @@ class Table {
     const OP_INSERT = 'insert';
     const OP_UPDATE = 'update';
     const OP_DELETE = 'delete';
+    const RETURN_DEFAULT = 0;
+    const RETURN_MODEL = 1;
+    const RETURN_JSON = 2;
 
+    /**
+     * Table name
+     * @var string
+     */
     protected $name;
+
+    /**
+     * Connection object
+     * @var \DBScribe\Connection
+     */
     protected $connection;
+
+    /**
+     * Table Description
+     * @var string
+     */
     protected $description;
+
+    /**
+     * New Table Description
+     * @var string 
+     */
     protected $newDescription;
+
+    /**
+     * Array of columns and some of their properties
+     * @var array
+     */
     protected $columns;
+
+    /**
+     * Array of new columns and their definitions
+     * @var array
+     */
     protected $newColumns;
+
+    /**
+     * Array of references from this table to other tables
+     * @var array
+     */
     protected $references;
+
+    /**
+     * Array of references from other tables to this table
+     * @var array
+     */
     protected $backReferences;
+
+    /**
+     * Array of indexes
+     * @var string
+     */
     protected $indexes;
+
+    /**
+     * Array of new references from this table to others
+     * @var array
+     */
     protected $newReferences;
+
+    /**
+     * The primary key of the table
+     * @var string
+     */
     protected $primaryKey;
+
+    /**
+     * Indicates whether to remove the primary key
+     * @var boolean
+     */
     protected $dropPrimaryKey;
+
+    /**
+     * The new primary key to replace the old
+     * @var string
+     */
     protected $newPrimaryKey;
+
+    /**
+     * Array of columns to remove from the table
+     * @var array
+     */
     protected $dropColumns;
+
+    /**
+     * Array of existing columns with new definitions
+     * @var array
+     */
     protected $alterColumns;
+
+    /**
+     * Array of columns whose references should be dropped
+     * @var array
+     */
     protected $dropReferences;
+
+    /**
+     * Array of columns whose references need be changed
+     * @var array
+     */
     protected $alterReferences;
+
+    /**
+     * Array of columns to add indexes to
+     * @var array
+     */
     protected $newIndexes;
+
+    /**
+     * Array of columns whose indexes should be dropped
+     * @var array
+     */
     protected $dropIndexes;
+
+    /**
+     * The query string to be executed
+     * @var string
+     */
     protected $query;
+
+    /**
+     * The query that serves to join results with referenced tables' rows
+     * @var string
+     */
     protected $joinQuery;
+
+    /**
+     * Array of prepared values to be saved to the database
+     * @var array
+     */
     protected $values;
+
+    /**
+     * Array of referenced tables from which to draw more rows
+     * @var array
+     */
     protected $joins;
+
+    /**
+     * Indicates whether multiple values are prepared for the query
+     * @var boolean
+     */
     protected $multiple;
+
+    /**
+     * Indicates whether to return results with a class model
+     * @var boolean
+     */
     protected $withModel;
+
+    /**
+     * The class that extends \DBScribe\Row which to map results to
+     * @var \DBScribe\Row
+     */
     protected $rowModel;
+
+    /**
+     * Holds the current model the class is working with
+     * @var \DBScribe\Row
+     */
     protected $rowModelInUse;
+
+    /**
+     * Array of columns and options to order the result by
+     * @var array
+     */
     protected $orderBy;
+
+    /**
+     * The limit part of the query
+     * @var string 
+     */
     protected $limit;
+
+    /**
+     * Indicates whether to delay the execution of the query until @method execute() is called
+     * @var boolean
+     */
     protected $delayExecute;
+
+    /**
+     * Indicates whether to run the postSave method of the Row after operating the query
+     * @var boolean
+     */
     protected $doPost;
+
+    /**
+     * Currenct operation: one of the OP_ constants of this class
+     * @var string
+     */
     protected $current;
+
+    /**
+     * Additional conditions to attach to the query
+     * @var string
+     */
     protected $customWhere;
+
+    /**
+     * Indicates conditions have been attached to the query. This does not take
+     * the customWhere into cognizance
+     * @var boolean 
+     */
     protected $where;
+
+    /**
+     * Array of columns to group query results by
+     * @var array 
+     */
     protected $groups;
+
+    /**
+     * The having portion of the query
+     * @var string
+     */
     protected $having;
+
+    /**
+     * Array holding the relationship information with all other tables
+     * @var array 
+     */
     protected $relationshipData;
-    protected $cache;
-    protected $toJSON;
 
     /**
      * Used with customWhere(). No relationship with join()
@@ -66,19 +253,27 @@ class Table {
     protected $customWhereJoin;
 
     /**
+     * Indicates the type of results expected
+     * @var int One of the RETURN_* constants of this class
+     */
+    protected $return;
+
+
+    /**
      * Class contructor
-     * @param string $name Name of the table
+     * @param string $name Name of the table, without the prefix if already 
+     * supplied in the connection object
      * @param \DBScribe\Connection $connection
+     * @param \DBScribe\Row $rowModel
      */
     public function __construct($name, Connection $connection = null, Row $rowModel = null) {
-        $this->name = Util::camelTo_($name);
+        $this->name = $connection->getTablePrefix() . strtolower(Util::camelTo_($name));
         $this->connection = $connection;
         $this->rowModel = ($rowModel) ? $rowModel : new Row();
         $this->multiple = false;
         $this->doPost = false;
-        $this->withModel = false;
+        $this->return = Table::RETURN_MODEL;
         $this->delayExecute = false;
-        $this->toJSON = false;
         $this->where = false;
         $this->groups = array();
         $this->orderBy = array();
@@ -99,6 +294,16 @@ class Table {
         $this->alterReferences = array();
 
         $this->init();
+    }
+
+    /**
+     * Sets the model to use with fetched rows
+     * @param \DBScribe\Row $model
+     * @return \DBScribe\Table
+     */
+    public function setRowModel(Row $model) {
+        $this->rowModel = $model;
+        return $this;
     }
 
     /**
@@ -223,10 +428,11 @@ class Table {
 
     /**
      * Fetches the indexes
+     * @param string $columnName Name of column to return the index
      * @return array
      */
-    public function getIndexes() {
-        return $this->indexes;
+    public function getIndexes($columnName = null) {
+        return ($columnName) ? $this->indexes[$columnName] : $this->indexes;
     }
 
     /**
@@ -237,7 +443,7 @@ class Table {
      * @return \DBScribe\Table
      */
     public function addIndex($columnName, $type = Table::INDEX_REGULAR) {
-        if (!in_array($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newIndexes))
+        if (!array_key_exists($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newIndexes))
             $this->newIndexes[$columnName] = $type;
         return $this;
     }
@@ -526,8 +732,11 @@ class Table {
         $qry = 'SELECT c.column_name as colName, c.column_default as colDefault,
 			c.is_nullable as nullable, c.column_type as colType, c.extra, c.column_key as colKey,
                         c.character_set_name as charset, c.collation_name as collation';
-        $qry .=' FROM INFORMATION_SCHEMA.COLUMNS c
-			WHERE c.table_schema="' . $this->connection->getDBName() . '" AND c.table_name="' . $this->name . '"';
+        $qry .= ', d.index_name as indexName';
+        $qry .=' FROM INFORMATION_SCHEMA.COLUMNS c ' .
+                'LEFT JOIN INFORMATION_SCHEMA.STATISTICS d'
+                . ' ON c.column_name = d.column_name AND d.table_schema="' . $this->connection->getDBName() . '" AND d.table_name="' . $this->name . '" ' .
+                'WHERE c.table_schema="' . $this->connection->getDBName() . '" AND c.table_name="' . $this->name . '"';
 
         $columns = $this->connection->doPrepare($qry);
         if (is_bool($columns))
@@ -536,12 +745,12 @@ class Table {
         foreach ($columns as $column) {
             $this->columns[$column['colName']] = $column;
             if (in_array($column['colKey'], array('MUL', 'UNI', 'PRI', 'SPA', 'FUL'))) {
-                $this->indexes[] = $column['colName'];
+                $this->indexes[$column['colName']] = $column['indexName'];
             }
         }
     }
 
-    public function getContraintName($column) {
+    public function getConstraintName($column) {
         if (array_key_exists($column, $this->references)) {
             return $this->references[$column]['constraintName'];
         }
@@ -685,13 +894,13 @@ class Table {
      * Selects rows from database
      * Many rows can be passed in as criteria
      * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
+     * @param int $return Indicates the type of result expected
      * @return \DBScribe\Table|ArrayCollection
      */
-    public function select(array $criteria = array(), $toJSON = false) {
+    public function select(array $criteria = array(), $return = Table::RETURN_MODEL) {
         if (!$this->checkReady()) {
             return ($this->delayExecute) ? $this : new ArrayCollection();
         }
-        $this->toJSON = $toJSON;
 
         $this->setRowRelationships();
         $this->current = self::OP_SELECT;
@@ -712,7 +921,7 @@ class Table {
         if ($this->having) {
             $this->query .= ' HAVING ' . $this->having;
         }
-        $this->withModel = true;
+        $this->return = $return;
         if ($this->delayExecute) {
             return $this;
         }
@@ -748,25 +957,39 @@ class Table {
     }
 
     private function returnSelect($return) {
-        $forThis = $this->relationshipData = array();
-        foreach ($return as &$ret) {
-            $imm = array();
-            foreach ($this->getColumns(true) as $col) {
-                $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
-                unset($ret[Util::_toCamel($col)]);
-            }
-
-            if ($this->getPrimaryKey() && !empty($imm[Util::_toCamel($this->getPrimaryKey())])) {
-                $forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
-            }
-            else
-                $forThis[] = $imm;
-
-            if (!empty($ret)) {
-                $this->relationshipData[] = $ret;
-            }
+        if (!is_array($return)) {
+            $return = array();
         }
-        return $this->createReturnModels($forThis);
+        switch ($this->return) {
+//            case self::RETURN_DEFAULT:
+//                break;
+            case self::RETURN_JSON:
+                $return = json_encode($return);
+                break;
+            case self::RETURN_MODEL:
+                $forThis = $this->relationshipData = array();
+                foreach ($return as &$ret) {
+                    $imm = array();
+                    foreach ($this->getColumns(true) as $col) {
+                        $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
+                        unset($ret[Util::_toCamel($col)]);
+                    }
+
+                    if ($this->getPrimaryKey() && !empty($imm[Util::_toCamel($this->getPrimaryKey())])) {
+                        $forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
+                    }
+                    else
+                        $forThis[] = $imm;
+
+                    if (!empty($ret)) {
+                        $this->relationshipData[] = $ret;
+                    }
+                }
+                $return = $this->createReturnModels($forThis);
+                break;
+        }
+
+        return $return;
     }
 
     private function createReturnModels(array $forThis) {
@@ -794,11 +1017,14 @@ class Table {
      * @param string $custom
      * @param string $logicalConnector Logical operator to link the <i><b>custom where</b></i>
      * with the <i><b>regular where</b></i> if available
+     * @param string $tablePlaceholder A string within the custom where to be 
+     * replaced with the table name. Useful when a table prefix might have been 
+     * used
      * @return \DBScribe\Table
      */
-    public function customWhere($custom, $logicalConnector = 'AND') {
+    public function customWhere($custom, $logicalConnector = 'AND', $tablePlaceholder = ':TBL:') {
         $this->customWhereJoin = $logicalConnector;
-        $this->customWhere = trim($custom);
+        $this->customWhere = trim(str_replace($tablePlaceholder, $this->name, $custom));
         return $this;
     }
 
@@ -988,11 +1214,11 @@ class Table {
      * @param string $column The column to count
      * @return Int
      */
-    public function count($column = '*', $criteria = array()) {
+    public function count($column = '*', $criteria = array(), $return = Table::RETURN_MODEL) {
         $this->query = 'SELECT COUNT(' . Util::camelTo_($column) . ') as rows FROM `' . $this->name . '`';
         $this->queryWhere($criteria);
 
-        $this->withModel = false;
+        $this->return = $return;
         if ($ret = $this->execute()) {
             return ($ret) ? $ret[0]['rows'] : 0;
         }
@@ -1005,10 +1231,10 @@ class Table {
      * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
      * @return ArrayCollection
      */
-    public function distinct($column, array $criteria = array()) {
+    public function distinct($column, array $criteria = array(), $return = Table::RETURN_MODEL) {
         $this->current = self::OP_SELECT;
-        $this->withModel = true;
-        $this->query = 'SELECT DISTINCT `' . $this->name . '`.`' . Util::camelTo_($column) . '` FROM `' . $this->name . '` ' . $this->joinQuery;
+        $this->return = $return;
+        $this->query = 'SELECT DISTINCT `' . $this->name . '`.`' . Util::camelTo_($column) . '` as ' . Util::_toCamel($column) . ' FROM `' . $this->name . '` ' . $this->joinQuery;
         $this->queryWhere($criteria);
 
         if ($this->groups) {
@@ -1285,32 +1511,19 @@ class Table {
             $this->query .= ' FROM `' . $this->name . '`';
         }
 
-        $model = ($this->withModel) ? $this->rowModel : null;
-
+        $model = ($this->return) ? $this->rowModel : null;
+        
         $result = $this->connection->doPrepare($this->query, $this->values, array(
             'multipleRows' => $this->multiple,
             'model' => $model
         ));
 
-        $current = $this->current;
-        $toJson = $this->toJSON;
-        $this->resetQuery();
-
-        $forJson = array($result);
-
-        if ($this->doPost) {
-//			return $this->rowModelInUse->postSave($this->doPost, $result, $this->lastInsertId());
-        }
-        if ($current === self::OP_SELECT && is_bool($result)) {
-            $result = new ArrayCollection();
-            $forJson = array();
-        }
-        elseif ($current === self::OP_SELECT && is_array($result)) {
+        if ($this->current === self::OP_SELECT) {
             $result = $this->returnSelect($result);
-            $forJson = $result->getArrayCopy();
         }
 
-        return ($toJson) ? json_encode($forJson) : $result;
+        $this->resetQuery();
+        return $result;
     }
 
     private function resetQuery() {
@@ -1324,10 +1537,13 @@ class Table {
         $this->groups = array();
         $this->current = null;
         $this->multiple = false;
-        $this->withModel = false;
-        $this->toJSON = false;
+        $this->return = self::RETURN_MODEL;
     }
 
+    /**
+     * Fetches the autogenerated id of the last insert statement, if primary key is autogenerated
+     * @return mixed
+     */
     public function lastInsertId() {
         return $this->connection->lastInsertId();
     }

@@ -8,9 +8,11 @@ namespace DBScribe;
 use ArrayObject;
 
 /**
- * Description of ArrayCollection
+ * This is a collection class which has the capacity to hold many rows in an 
+ * iteratable manner (like an array) while making available some nice methods 
+ * to operate on these rows
  *
- * @author topman
+ * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 class ArrayCollection extends ArrayObject {
 
@@ -19,6 +21,28 @@ class ArrayCollection extends ArrayObject {
      * @var int Indicates the current position of the cursor
      */
     private $current;
+
+    /**
+     * Gets a parameter from the first entry in the collection if it's an object
+     * @param string $name
+     * @return mixed
+     */
+    public function __get($name) {
+        if (is_object($this->first()))
+            return $this->first()->$name;
+    }
+
+    /**
+     * Calls a method of the first entry in the collection if it's an object
+     * @param string $name
+     * @param array $arguments
+     * @return mixed
+     */
+    public function __call($name, $arguments) {
+        if (!method_exists($this, $name) && is_object($this->first())) {
+            return call_user_func_array(array($this->first(), $name), $arguments);
+        }
+    }
 
     /**
      * Fetches the first element in the collection

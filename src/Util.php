@@ -3,10 +3,10 @@
 namespace DBScribe;
 
 /**
- * @author Ezra Obiwale <ezra.obiwale@gmail.com>
- * @category Database
- * @copyright 2013
- * @abstract
+ * This is a utility class which has some beautiful methods that serve different
+ * purposes
+ * 
+ * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 class Util {
 

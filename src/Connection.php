@@ -3,11 +3,10 @@
 namespace DBScribe;
 
 /**
- * Manipulate your database easily
+ * The class wraps around the PDO class to serve as the connection point to the
+ * database, extending the class with some more useful public methods
  *
- * @author Ezra Obiwale <ezra.obiwale@gmail.com>
- * @copyright 2013
- * @TODO Show action error
+ * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 class Connection extends \PDO {
 
@@ -55,14 +54,22 @@ class Connection extends \PDO {
      * @param array $options
      */
     public function __construct($dsn, $username, $password, $options = array()) {
-        parent::__construct($dsn, $username, $password, $options);
+        $this->dbName = str_replace('dbname=', '', stristr($dsn, 'dbname='));
+
+        if (@$options['create']) {
+            parent::__construct(stristr($dsn, ';dbname=', true), $username, $password);
+            if ($this->newDB($this->dbName) && $this->dbName) {
+                $this->query('use `' . $this->dbName . '`');
+            }
+        }
+        else
+            parent::__construct($dsn, $username, $password, $options);
 
         $this->dsn = $dsn;
         $this->username = $username;
         $this->password = $password;
         $this->options = $options;
 
-        $this->dbName = str_replace('dbname=', '', stristr($dsn, 'dbname='));
         $this->beginTransaction();
     }
 
@@ -101,10 +108,10 @@ class Connection extends \PDO {
      * @return \DBScibe\Connection|boolean
      */
     public function newDB($dbname) {
-        $fQry = "CREATE DATABASE ";
-
+        $fQry = "CREATE DATABASE IF NOT EXISTS ";
+        $qry = '';
         if (is_string($dbname)) {
-            @$qry .= $fQry . "`" . $dbname . "`";
+            $qry .= $fQry . "`" . $dbname . "`";
         }
         else if (is_array($dbname)) {
             foreach ($dbname as $db) {
@@ -278,14 +285,13 @@ class Connection extends \PDO {
 
         if (count($table->getDropIndexes())) {
             $qry .= $alter;
-
             $cnt = 1;
             $iQry = '';
             foreach ($table->getDropIndexes(true) as $column) {
-                if (in_array($column, $table->getIndexes())) {
+                if (array_key_exists($column, $table->getIndexes())) {
                     if ($iQry)
                         $iQry .= ',';
-                    $iQry .= ' DROP INDEX `' . $column . '`';
+                    $iQry .= ' DROP INDEX `' . $table->getIndexes($column) . '`';
                 }
                 $cnt++;
             }
@@ -387,6 +393,10 @@ class Connection extends \PDO {
                         "`) ON DELETE {$desc["onDelete"]} ON UPDATE {$desc["onUpdate"]}; ";
             }
         }
+
+        if (empty($qry))
+            return false;
+        
         $return = $this->doPrepare($qry);
         $table->init();
         return $return;
@@ -444,7 +454,7 @@ class Connection extends \PDO {
      * @return \DBScribe\Table
      */
     public function table($tablename, Row $rowModel = null) {
-        return new Table($this->tablePrefix . strtolower($tablename), $this, $rowModel);
+        return new Table($tablename, $this, $rowModel);
     }
 
     /**

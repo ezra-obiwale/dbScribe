@@ -7,6 +7,11 @@ class Row implements \JsonSerializable {
     private $connection;
     private $relationships = array();
     private $by;
+
+    /**
+     *
+     * @var \DBScribe\Table
+     */
     protected $_table;
 
     /**
@@ -44,11 +49,12 @@ class Row implements \JsonSerializable {
      */
     final public function populate(array $data) {
         foreach ($data as $property => $value) {
+            $property = \Util::_toCamel($property);
             $method = 'set' . ucfirst($property);
             if (method_exists($this, $method)) {
                 $this->$method($value);
             }
-            else {
+            elseif (property_exists($this, $property)) {
                 $this->$property = $value;
             }
         }
@@ -155,7 +161,7 @@ class Row implements \JsonSerializable {
     final public function __call($name, $args) {
         if (NULL !== $return = $this->_call($name, $args))
             return $return;
-        
+
         if (!method_exists($this, $name)) {
             $_name = Util::camelTo_($name);
             if (substr($name, 0, 2) == 'by') {
@@ -194,7 +200,7 @@ class Row implements \JsonSerializable {
             $this->by = null;
             if (empty($where))
                 return new ArrayCollection;
-            
+
             // check joined tables' results
             if ($this->_table) {
                 $compressed = Util::compressArray($where);
