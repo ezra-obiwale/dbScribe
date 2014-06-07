@@ -163,41 +163,46 @@ class Row implements \JsonSerializable {
             return $return;
 
         if (!method_exists($this, $name)) {
-            $_name = Util::camelTo_($name);
-            if (substr($name, 0, 2) == 'by') {
-                if ($this->connection !== null) {
-                    $relTable = call_user_func_array(array($this->connection, 'table'), array($_name, $this->getRelTableModel($args)));
-                    if (!$relTable->exists()) {
-                        $this->by = lcfirst(substr($name, 2));
-                    }
-                    return $this;
-                }
+            if ($this->connection === null && $this->_table) {
+                $this->connection = $this->_table->getConnection();
             }
 
             $where = array();
-
-            if (isset($this->relationships[$_name])) {
-                $by = Util::camelTo_($this->by);
-                foreach ($this->relationships[$_name] as $relationships) {
-                    if ($by && $relationships['column'] !== $by) {
-                        continue;
-                    }
-
-                    $column = Util::_toCamel($relationships['column']);
-                    if (isset($args[0]['push']) && $args[0]['push'] && !$relationships['push'] ||
-                            isset($args[0]['pull']) && $args[0]['pull'] && $relationships['push'])
-                        continue;
-                    if (property_exists($this, $column)) {
-                        $where = $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column});
-                        break;
+            if ($this->connection !== null) {
+                $_name = $this->connection->getTablePrefix() . Util::camelTo_($name);
+                if (substr($name, 0, 2) == 'by') {
+                    if ($this->connection !== null) {
+                        $relTable = call_user_func_array(array($this->connection, 'table'), array($_name, $this->getRelTableModel($args)));
+                        if (!$relTable->exists()) {
+                            $this->by = lcfirst(substr($name, 2));
+                        }
+                        return $this;
                     }
                 }
-            }
-            else if (isset($args['relateWhere']) && is_array($args['relateWhere'])) {
-                $where = $args['relateWhere'];
-            }
 
-            $this->by = null;
+                if (isset($this->relationships[$_name])) {
+                    $by = Util::camelTo_($this->by);
+                    foreach ($this->relationships[$_name] as $relationships) {
+                        if ($by && $relationships['column'] !== $by) {
+                            continue;
+                        }
+
+                        $column = Util::_toCamel($relationships['column']);
+                        if (isset($args[0]['push']) && $args[0]['push'] && !$relationships['push'] ||
+                                isset($args[0]['pull']) && $args[0]['pull'] && $relationships['push'])
+                            continue;
+                        if (property_exists($this, $column)) {
+                            $where = $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column});
+                            break;
+                        }
+                    }
+                }
+                else if (isset($args['relateWhere']) && is_array($args['relateWhere'])) {
+                    $where = $args['relateWhere'];
+                }
+
+                $this->by = null;
+            }
             if (empty($where))
                 return new ArrayCollection;
 
@@ -212,7 +217,7 @@ class Row implements \JsonSerializable {
                     return null;
 
                 if (!isset($relTable))
-                    $relTable = call_user_func_array(array($this->connection, 'table'), array($_name, $this->getRelTableModel($args)));
+                    $relTable = call_user_func_array(array($this->connection, 'table'), array(Util::camelTo_($name), $this->getRelTableModel($args)));
 
                 $return = $this->prepSelectRelTable($relTable, $args)->select($where);
                 if (is_bool($return)) {

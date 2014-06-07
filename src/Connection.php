@@ -86,7 +86,7 @@ class Connection extends \PDO {
      * @return string|null
      */
     public function getTablePrefix() {
-        return $this->tablePrefix;
+        return @$this->options['tablePrefix'];
     }
 
     /**
@@ -96,7 +96,7 @@ class Connection extends \PDO {
      * @return \DBScribe\Connection
      */
     public function setTablePrefix($prefix) {
-        $this->tablePrefix = $prefix;
+        $this->options['tablePrefix'] = $prefix;
 
         return $this;
     }
@@ -162,10 +162,10 @@ class Connection extends \PDO {
     public function createTable(Table &$table, $dropIfExists = true) {
         $qry = '';
         if ($dropIfExists) {
-            $qry .= "DROP TABLE IF EXISTS `" . $this->tablePrefix . $table->getName() . "`; ";
+            $qry .= "DROP TABLE IF EXISTS `" . $this->getTablePrefix() . $table->getName() . "`; ";
         }
 
-        $qry .= "CREATE TABLE IF NOT EXISTS `" . $this->tablePrefix . $table->getName() . "` (";
+        $qry .= "CREATE TABLE IF NOT EXISTS `" . $table->getName() . "` (";
 
         $newColumns = $table->getNewColumns(true);
         if ($table->getNewPrimarykey() && array_key_exists($table->getNewPrimarykey(), $newColumns)) {
@@ -227,26 +227,16 @@ class Connection extends \PDO {
         if (!$table->getDescription())
             $table->setDescription();
 
-        $qry .= ") " . $table->getDescription() . "; ";
         if (count($table->getNewReferences()) > 0) {
-            $alter = "ALTER TABLE `" . $this->tablePrefix . $table->getName() . "`";
             foreach ($table->getNewReferences(true) as $column => $infoArray) {
-                $refTable = $infoArray['table'];
-                $refColumn = $infoArray['column'];
-                $dTable = $table->getName();
-                $dColumn = $column;
-                if (class_exists('Util')) {
-                    $refTable = \Util::_toCamel($refTable);
-                    $refColumn = ucfirst(\Util::_toCamel($refColumn));
-                    $dTable = \Util::_toCamel($table->getName());
-                    $dColumn = ucfirst(\Util::_toCamel($column));
-                }
-                $qry .= ' ' . $alter . " ADD FOREIGN KEY (`{$column}`) REFERENCES `" .
-                        $this->dbName . '`.`' . $this->tablePrefix .
+                $qry .= ", FOREIGN KEY (`{$column}`) REFERENCES `" .
+                        $this->dbName . '`.`' . $this->getTablePrefix() .
                         $infoArray['table'] . "` (`" . $infoArray['column'] .
-                        "`) ON DELETE {$infoArray["onDelete"]} ON UPDATE {$infoArray["onUpdate"]}; ";
+                        "`) ON DELETE {$infoArray["onDelete"]} ON UPDATE {$infoArray["onUpdate"]}";
             }
         }
+
+        $qry .= ") " . $table->getDescription() . "; ";
         $return = $this->doPrepare($qry);
         $table->init();
         return $return;
@@ -261,7 +251,7 @@ class Connection extends \PDO {
      * onUpdate and\or onDelete values to existing references
      */
     public function alterTable(Table &$table) {
-        $alter = "ALTER TABLE `" . $this->tablePrefix . $table->getName() . '`';
+        $alter = "ALTER TABLE `" . $table->getName() . '`';
         $qry = '';
 
         if ($table->getNewDescription()) {
@@ -388,7 +378,7 @@ class Connection extends \PDO {
         if (count($table->getNewReferences())) {
             foreach ($table->getNewReferences(true) as $column => $desc) {
                 $qry .= ' ' . $alter . " ADD FOREIGN KEY (`{$column}`) REFERENCES `" .
-                        $this->dbName . '`.`' . $this->tablePrefix .
+                        $this->dbName . '`.`' . $this->getTablePrefix() .
                         $desc['table'] . "` (`" . $desc['column'] .
                         "`) ON DELETE {$desc["onDelete"]} ON UPDATE {$desc["onUpdate"]}; ";
             }
@@ -396,7 +386,7 @@ class Connection extends \PDO {
 
         if (empty($qry))
             return false;
-        
+
         $return = $this->doPrepare($qry);
         $table->init();
         return $return;
@@ -435,7 +425,7 @@ class Connection extends \PDO {
         $qry = "DROP TABLE ";
 
         if (is_string($tablename)) {
-            $qry .= "`" . $this->tablePrefix . $tablename . "`";
+            $qry .= "`" . $this->getTablePrefix() . $tablename . "`";
         }
 
         try {

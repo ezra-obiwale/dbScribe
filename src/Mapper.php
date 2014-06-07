@@ -31,7 +31,7 @@ abstract class Mapper extends Row {
     public function init(Table &$table) {
         if (!defined('DATA'))
             define('DATA', __DIR__);
-        
+
         $this->_table = & $table;
         $className = str_replace('\\', '.', get_called_class());
         $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . $className;
@@ -330,9 +330,14 @@ abstract class Mapper extends Row {
         $return = null;
         // update if any parent is changed
         foreach (class_parents(get_called_class()) as $parent) {
-            if ($parent === 'DScribe\Core\AModel')
+            if ($parent === get_class())
                 break;
 
+            $parent = str_replace(array(
+                'DScribe', 'DBScribe', 'DSLive'
+                    ), array(
+                'd-scribe/core/src', 'd-scribe/db-scribe/src', 'd-scribe/ds-live/src'
+                    ), $parent);
             $parentPath = (is_readable(MODULES . str_replace('\\', '/', $parent) . '.php')) ?
                     MODULES . str_replace('\\', '/', $parent) . '.php' :
                     VENDOR . str_replace('\\', '/', $parent) . '.php';
@@ -792,7 +797,7 @@ abstract class Mapper extends Row {
      * @throws Exception
      * @todo allow referencing table with no model
      */
-    private function createReference($property, array $annot, array $primary = array(), $create = true) {
+    private function createReference($property, array $annot, array $primary = array()) {
         if (!isset($annot['attrs']['model']))
             throw new Exception('Attribute "model" not set for reference property "' .
             $property . '" of class "' . get_called_class() . '"');
@@ -806,7 +811,7 @@ abstract class Mapper extends Row {
 
         $refTable = new $annot['attrs']['model'];
 
-        if ($refTable->getTableName() === $this->_table->getName() && !empty($primary['column'])) {
+        if ($this->getConnection()->getTablePrefix() . $refTable->getTableName() === $this->_table->getName() && !empty($primary['column'])) {
             $annot['attrs']['property'] = Util::camelTo_($primary['column']);
             $attrs = $primary['desc'];
             $conColumns = $this->_table->getColumns();
@@ -833,7 +838,6 @@ abstract class Mapper extends Row {
             $attrs = $refTable->getSettings(\Util::_toCamel($annot['attrs']['property']));
             $conColumns = $conTable->getColumns();
         }
-
         if ($attrs === null)
             throw new Exception('Property "' . $annot['attrs']['property'] . '", set as attribute "property" for property "' .
             $property . '" in class "' . get_called_class() . '", does not exist');
@@ -977,10 +981,11 @@ abstract class Mapper extends Row {
             }
         }
 
-        if (!$this->getConnection())
+        if (!$this->getConnection() && $this->_table) {
             $this->setConnection($this->_table->getConnection());
-        $table = $this->_table->getConnection()->table($this->getTableName());
-        $this->init($table);
+            $table = $this->_table->getConnection()->table($this->getTableName());
+            $this->init($table);
+        }
 
         parent::preSave();
     }

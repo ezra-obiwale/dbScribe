@@ -906,7 +906,7 @@ class Table {
         $this->current = self::OP_SELECT;
 
         $this->query = 'SELECT ' . $this->prepareColumns();
-        $this->query .= ' FROM `' . $this->name . '`' . $this->joinQuery;
+        $this->query .= ' FROM `' . $this->name . '`' . $this->processJoins();
         $this->queryWhere($criteria);
 
         if ($this->groups) {
@@ -1105,7 +1105,7 @@ class Table {
         if (!$this->joinQuery)
             return false;
 
-        $prefix = $tableName . '_';
+        $prefix = $this->connection->getTablePrefix() . $tableName . '_';
 
         if (!$object) {
             $object = new Row();
