@@ -432,6 +432,9 @@ class Table {
      * @return array
      */
     public function getIndexes($columnName = null) {
+        if (!$this->indexes) {
+            $this->indexes = array();
+        }
         return ($columnName) ? $this->indexes[$columnName] : $this->indexes;
     }
 

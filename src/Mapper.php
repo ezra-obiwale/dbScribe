@@ -648,9 +648,9 @@ abstract class Mapper extends Row {
                 if (!$this->getConnection())
                     $this->setConnection($this->_table->getConnection());
 
-                $relTable = $this->_table->getConnection()->table(Util::camelTo_($name));
+                $relTable = $this->getConnection()->table(Util::camelTo_($name));
                 $model = new $modelTable[0];
-                $model->setConnection($this->_table->getConnection());
+                $model->setConnection($this->getConnection());
 
                 $model->init($relTable);
                 $args['model'] = $model;
