@@ -702,7 +702,7 @@ abstract class Mapper extends Row {
             }
         }
 
-        foreach ($defer as &$desc) {
+        foreach ($defer as $property => &$desc) {
             $desc = $this->parseForReference($property, $desc, $primary, $createReference);
         }
 
@@ -970,7 +970,7 @@ abstract class Mapper extends Row {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'H:i');
                 $val = $this->$settingKey;
             }
-            elseif (strtolower(@$this->settings[$settingKey]['type']) === 'timestamp' && !empty($val)) {
+            elseif (strtolower(@$this->settings[$settingKey]['type']) === 'timestamp' && !empty($val) && !strstr($val, '0000')) {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d H:i:s');
                 $val = $this->$settingKey;
             }

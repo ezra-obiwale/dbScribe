@@ -384,9 +384,6 @@ class Connection extends \PDO {
             }
         }
 
-        if (empty($qry))
-            return false;
-
         $return = $this->doPrepare($qry);
         $table->init();
         return $return;

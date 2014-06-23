@@ -45,7 +45,9 @@ class Annotation {
      */
     private function parseProperties($docType = '') {
         foreach ($this->reflector->getProperties() as $refProp) {
-            $this->annotations['properties'][$refProp->name] = $this->parseDocComment($refProp->getDocComment(), $docType);
+            $parsed = $this->parseDocComment($refProp->getDocComment(), $docType);
+            if ($parsed)
+                $this->annotations['properties'][$refProp->name] = $parsed;
         }
     }
 
@@ -57,7 +59,7 @@ class Annotation {
      */
     final protected function parseDocComment($docComment, $docType = '') {
         if (empty($docComment) || !is_string($docComment))
-            return '';
+            return array();
 
         $annotations = array();
         $match = '#@' . stripslashes($docType) . '(.*?)\n#s';

@@ -1336,7 +1336,6 @@ class Table {
                 $this->query .= ' AND ';
             $this->query .= '`' . $where . '`=:' . $where;
         }
-
         $this->multiple = true;
         $this->doPost = self::OP_UPDATE;
         if ($this->delayExecute) {
@@ -1420,7 +1419,7 @@ class Table {
         if (!empty($criteria))
             $this->query .= ' WHERE ';
         foreach ($criteria as $ky => $row) {
-            $rowArray = $this->checkModel($row);
+            $rowArray = $this->checkModel($row, true);
             $cnt = 0;
             foreach ($rowArray as $column => $value) {
                 if (!is_object($value) && $value === null) {
@@ -1438,7 +1437,7 @@ class Table {
             if ($ky < (count($criteria) - 1))
                 $this->query .= ' OR ';
         }
-
+        
         if ($this->delayExecute) {
             return $this;
         }
