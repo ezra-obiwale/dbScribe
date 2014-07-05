@@ -1437,7 +1437,7 @@ class Table {
             if ($ky < (count($criteria) - 1))
                 $this->query .= ' OR ';
         }
-        
+
         if ($this->delayExecute) {
             return $this;
         }
