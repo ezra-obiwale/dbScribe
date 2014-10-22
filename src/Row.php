@@ -7,6 +7,7 @@ class Row implements \JsonSerializable {
     private $connection;
     private $relationships = array();
     private $by;
+    private $content;
 
     /**
      *
@@ -47,7 +48,7 @@ class Row implements \JsonSerializable {
      * @param array $data
      * @return \DBScribe\Row
      */
-    final public function populate(array $data) {
+    public function populate(array $data) {
         foreach ($data as $property => $value) {
             $property = \Util::_toCamel($property);
             $method = 'set' . ucfirst($property);
@@ -73,6 +74,7 @@ class Row implements \JsonSerializable {
         unset($ppts['_tableName']);
         unset($ppts['by']);
         unset($ppts['_table']);
+        unset($ppts['content']);
         return $ppts;
     }
 
@@ -192,8 +194,7 @@ class Row implements \JsonSerializable {
                                 isset($args[0]['pull']) && $args[0]['pull'] && $relationships['push'])
                             continue;
                         if (property_exists($this, $column)) {
-                            $where = $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column});
-                            break;
+                            $where = array_merge($where, $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column}));
                         }
                     }
                 }
@@ -219,7 +220,8 @@ class Row implements \JsonSerializable {
                 if (!isset($relTable))
                     $relTable = call_user_func_array(array($this->connection, 'table'), array(Util::camelTo_($name), $this->getRelTableModel($args)));
 
-                $return = $this->prepSelectRelTable($relTable, $args)->select($where);
+
+                $return = $this->prepSelectRelTable($relTable, $args)->select($where, isset($args[0]['returnType']) ? $args[0]['returnType'] : Table::RETURN_MODEL);
                 if (is_bool($return)) {
                     return new ArrayCollection;
                 }
@@ -374,9 +376,19 @@ class Row implements \JsonSerializable {
 
     /**
      * Function to call after fetching from the db
+     * @param string $property Property to act on
      */
-    public function postFetch() {
-        
+    public function postFetch($property = null) {
+        $this->content = get_object_vars($this);
+    }
+
+    /**
+     * Fetchs the value of a property/column as it is in the database
+     * @param string $property
+     * @return mixed
+     */
+    final public function getDBValue($property) {
+        return $this->content[$property];
     }
 
     final public function setTable(Table $table) {

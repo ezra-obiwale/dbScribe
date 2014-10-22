@@ -251,7 +251,7 @@ class Connection extends \PDO {
      * onUpdate and\or onDelete values to existing references
      */
     public function alterTable(Table &$table) {
-        $alter = "ALTER TABLE `" . $table->getName() . '`';
+        $alter = 'ALTER TABLE `' . $this->getDBName() . '`.`' . $table->getName() . '`';
         $qry = '';
 
         if ($table->getNewDescription()) {
@@ -312,7 +312,7 @@ class Connection extends \PDO {
 
         if (count($table->getNewColumns())) {
             $qry .= ' ' . $alter;
-            $qry .= $this->addNewColumns($table->getNewColumns(true), $table);
+            $qry .= $this->addNewColumns($table->getNewColumns(true), $table, $dropColumns);
             $qry .= ';';
         }
 
@@ -389,11 +389,13 @@ class Connection extends \PDO {
         return $return;
     }
 
-    private function addNewColumns(array $columns, Table $table) {
+    private function addNewColumns(array $columns, Table $table, array $dropColumns) {
         $qry = '';
         $cnt = 1;
         foreach ($columns as $column => $desc) {
-            if (!in_array($column, $table->getColumns(true))) {
+            if (!in_array($column, $table->getColumns(true)) ||
+                    (in_array($column, $table->getColumns(true)) &&
+                    in_array($column, $dropColumns))) {
                 if ($qry)
                     $qry .= ',';
                 $qry .= ' ADD COLUMN `' . $column . '` ' . $desc;

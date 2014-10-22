@@ -258,7 +258,6 @@ class Table {
      */
     protected $return;
 
-
     /**
      * Class contructor
      * @param string $name Name of the table, without the prefix if already 
@@ -478,6 +477,7 @@ class Table {
 
     /**
      * Fetches the indexes to remove
+     * @param bool $reset Reset the indexes
      * @return array
      */
     public function getDropIndexes($reset = false) {
@@ -521,6 +521,7 @@ class Table {
 
     /**
      * Fetches columns to remove
+     * @param bool $reset Reset the columns
      * @return array
      */
     public function getDropColumns($reset = false) {
@@ -532,6 +533,7 @@ class Table {
 
     /**
      * Fetches columns to add
+     * @param bool $reset Reset the columns
      * @return array
      */
     public function getNewColumns($reset = false) {
@@ -716,7 +718,7 @@ class Table {
             if (isset($info['constraintType']) && $info['constraintType'] === 'PRIMARY KEY') {
                 if (isset($info['columnName']))
                     $this->primaryKey = $info['columnName'];
-            } else {
+            } else if ($info['refTable']) {
                 if (isset($info['constraintType']))
                     unset($info['constraintType']);
                 if (isset($info['columnName'])) {
@@ -963,32 +965,35 @@ class Table {
         if (!is_array($return)) {
             $return = array();
         }
+        $forThis = $this->relationshipData = array();
+
+        foreach ($return as &$ret) {
+            $imm = array();
+            foreach ($this->getColumns(true) as $col) {
+                $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
+                unset($ret[Util::_toCamel($col)]);
+            }
+
+            if ($this->getPrimaryKey() && !empty($imm[Util::_toCamel($this->getPrimaryKey())])) {
+                $forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
+            }
+            else
+                $forThis[] = $imm;
+
+            if (!empty($ret)) {
+                $this->relationshipData[] = $ret;
+            }
+        }
+
         switch ($this->return) {
-//            case self::RETURN_DEFAULT:
-//                break;
             case self::RETURN_JSON:
-                $return = json_encode($return);
+                $return = json_encode($forThis);
                 break;
             case self::RETURN_MODEL:
-                $forThis = $this->relationshipData = array();
-                foreach ($return as &$ret) {
-                    $imm = array();
-                    foreach ($this->getColumns(true) as $col) {
-                        $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
-                        unset($ret[Util::_toCamel($col)]);
-                    }
-
-                    if ($this->getPrimaryKey() && !empty($imm[Util::_toCamel($this->getPrimaryKey())])) {
-                        $forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
-                    }
-                    else
-                        $forThis[] = $imm;
-
-                    if (!empty($ret)) {
-                        $this->relationshipData[] = $ret;
-                    }
-                }
                 $return = $this->createReturnModels($forThis);
+                break;
+            case self::RETURN_DEFAULT:
+                $return = $forThis;
                 break;
         }
 
@@ -1015,6 +1020,19 @@ class Table {
     }
 
     /**
+     * Select a column where it is LIKE the value, i.e. it contains the given
+     * value     * 
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function like($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
      * Adds a custom query to the existing query. If no query exists, it serves as
      * the query.
      * @param string $custom
@@ -1026,18 +1044,47 @@ class Table {
      * @return \DBScribe\Table
      */
     public function customWhere($custom, $logicalConnector = 'AND', $tablePlaceholder = ':TBL:') {
-        $this->customWhereJoin = $logicalConnector;
-        $this->customWhere = trim(str_replace($tablePlaceholder, $this->name, $custom));
+        if (!$this->customWhere) {
+            $this->customWhereJoin = $logicalConnector;
+            $this->customWhere = trim(str_replace($tablePlaceholder, $this->name, $custom));
+        }
+        else {
+            $this->customWhere .= ' ' . $logicalConnector . ' ' . trim(str_replace($tablePlaceholder, $this->name, $custom));
+        }
         return $this;
     }
 
-    public function groupBy(array $columnNames) {
-        $this->groups = array_merge($this->groups, $columnNames);
+    /**
+     * Group result by data in given column
+     * @param string $columnName
+     * @return \DBScribe\Table
+     */
+    public function groupBy($columnName) {
+        $this->groups[] = $columnName;
         return $this;
     }
 
-    public function having($condition) {
-        $this->having = $condition;
+    /**
+     * Fetch rows that fulfill the given condition
+     * @param string $condition Ready-made query e.g `:TBL:`.`id` > 2
+     * @return \DBScribe\Table
+     */
+    public function having($condition, $tablePlaceholder = ':TBL:') {
+        $this->having = trim(str_replace($tablePlaceholder, $this->name, $condition));
+        return $this;
+    }
+
+    /**
+     * Fetch results that whose data in the given column is in the given array
+     * of values
+     * @param string $column
+     * @param array $values
+     * @param boolean $logicalAnd Indicates whether to join the in query to the
+     * rest of the query with an AND (TRUE) or an OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function in($column, array $values, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IN ("' . join('","', $values) . '")', $logicalAnd ? 'AND' : 'OR');
         return $this;
     }
 
@@ -1118,17 +1165,26 @@ class Table {
         foreach ($this->relationshipData as $data) {
             foreach ($columns as $column => $value) {
                 $compare = $prefix . $column;
-                if ((!is_array($value) && @$data[$compare] == $value) ||
-                        (is_array($value) && in_array(@$data[$compare], $value))) {
-                    $d = array();
-                    foreach ($data as $col => $val) {
-                        $d[str_replace($prefix, '', $col)] = $val;
-                    }
-
-                    $ob = clone $object;
-
-                    $array[] = $ob->populate($d);
+                if ($data[$compare] === null)
+                    continue;
+                $found = true;
+                if ((!is_array($value) && @$data[$compare] != $value) ||
+                        (is_array($value) && !in_array(@$data[$compare], $value))) {
+                    $found = false;
                 }
+                if (!$found)
+                    break;
+            }
+
+            if ($found) {
+                $d = array();
+                foreach ($data as $col => $val) {
+                    $d[str_replace($prefix, '', $col)] = $val;
+                }
+
+                $ob = clone $object;
+
+                $array[] = $ob->populate($d);
             }
         }
 
@@ -1336,6 +1392,7 @@ class Table {
                 $this->query .= ' AND ';
             $this->query .= '`' . $where . '`=:' . $where;
         }
+
         $this->multiple = true;
         $this->doPost = self::OP_UPDATE;
         if ($this->delayExecute) {
@@ -1419,7 +1476,7 @@ class Table {
         if (!empty($criteria))
             $this->query .= ' WHERE ';
         foreach ($criteria as $ky => $row) {
-            $rowArray = $this->checkModel($row, true);
+            $rowArray = $this->checkModel($row, false);
             $cnt = 0;
             foreach ($rowArray as $column => $value) {
                 if (!is_object($value) && $value === null) {
@@ -1514,7 +1571,7 @@ class Table {
         }
 
         $model = ($this->return) ? $this->rowModel : null;
-        
+
         $result = $this->connection->doPrepare($this->query, $this->values, array(
             'multipleRows' => $this->multiple,
             'model' => $model

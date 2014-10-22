@@ -21,6 +21,12 @@ class Annotation {
      */
     protected $reflector;
 
+    /**
+     * Parents of given class
+     * @var array
+     */
+    protected $parents;
+
     public function __construct($class) {
         if (is_string($class) && !class_exists($class)) {
             throw new \Exception('Class "' . $class . '" does not exist');
@@ -29,26 +35,15 @@ class Annotation {
             throw new \Exception('Constructor expects param $class to be a class name string or an object. ' . gettype($class) . ' given.');
 
         $this->reflector = new \ReflectionClass($class);
+        $this->parents = array_reverse(class_parents($class));
     }
 
     /**
-     * parses annotations for methods only
+     * Fetches the parent of the given class
+     * @return array
      */
-    private function parseMethods($docType = '') {
-        foreach ($this->reflector->getMethods() as $refMeth) {
-            $this->annotations['methods'][$refMeth->name] = $this->parseDocComment($refMeth->getDocComment(), $docType);
-        }
-    }
-
-    /**
-     * parses annotations for properties only
-     */
-    private function parseProperties($docType = '') {
-        foreach ($this->reflector->getProperties() as $refProp) {
-            $parsed = $this->parseDocComment($refProp->getDocComment(), $docType);
-            if ($parsed)
-                $this->annotations['properties'][$refProp->name] = $parsed;
-        }
+    final public function getParents() {
+        return $this->parents;
     }
 
     /**
@@ -78,19 +73,6 @@ class Annotation {
             $this->annotations['class'] = $this->parseDocComment($this->reflector->getDocComment(), $docType);
 
         return ($this->annotations['class']) ? $this->annotations['class'] : array();
-    }
-
-    /**
-     * Checks whether class|properties|methods 's annotations have been retrieved
-     * @param string $type
-     * @param string $docType The type of documentation to fetch e.g. param, see, link
-     * @param boolean $forceNew Indicates whether to fetch fresh annotations and not cached ones
-     * @return boolean
-     */
-    private function checkExists($type, $docType, $forceNew) {
-        if (!isset($this->annotations[strtolower($type)]) || $forceNew)
-            $this->{'parse' . ucfirst($type)}($docType);
-        return isset($this->annotations[strtolower($type)]);
     }
 
     /**
@@ -157,6 +139,48 @@ class Annotation {
             throw new \Exception('Property "' . $property . '" not found');
         $this->checkExists('properties', $docType, $forceNew);
         return ($this->annotations['properties'][$property]) ? $this->annotations['properties'][$property] : array();
+    }
+
+    /**
+     * Checks whether class|properties|methods 's annotations have been retrieved
+     * @param string $type
+     * @param string $docType The type of documentation to fetch e.g. param, see, link
+     * @param boolean $forceNew Indicates whether to fetch fresh annotations and not cached ones
+     * @return boolean
+     */
+    private function checkExists($type, $docType, $forceNew) {
+        if (!isset($this->annotations[strtolower($type)]) || $forceNew)
+            $this->{'parse' . ucfirst($type)}($docType);
+        return isset($this->annotations[strtolower($type)]);
+    }
+
+    /**
+     * parses annotations for methods only
+     */
+    private function parseMethods($docType = '') {
+        foreach ($this->reflector->getMethods() as $refMeth) {
+            $this->annotations['methods'][$refMeth->name] = $this->parseDocComment($refMeth->getDocComment(), $docType);
+        }
+    }
+
+    /**
+     * parses annotations for properties only
+     */
+    private function parseProperties($docType = '') {
+        $parents = $this->parents;
+        foreach ($this->reflector->getProperties() as $refProp) {
+            if (is_string($parents[$refProp->class]))
+                $parents[$refProp->class] = array();
+            $parents[$refProp->class][$refProp->name] = $this->parseDocComment($refProp->getDocComment(), $docType);
+//            $parsed = $this->parseDocComment($refProp->getDocComment(), $docType);
+//            if ($parsed)
+//                $this->annotations['properties'][$refProp->name] = $parsed;
+        }
+        $this->annotations['properties'] = array();
+        foreach ($parents as $array) {
+            if (is_array($array))
+                $this->annotations['properties'] = array_merge($this->annotations['properties'], $array);
+        }
     }
 
 }

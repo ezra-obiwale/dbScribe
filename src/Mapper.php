@@ -292,14 +292,14 @@ abstract class Mapper extends Row {
             $return .= (trim(strtolower($attrs['type'])) == 'timestamp') ? ' DEFAULT ' . $attrs['attrs']['default'] : ' DEFAULT "' . $attrs['attrs']['default'] . '"';
         }
 
+        if (isset($attrs['attrs']['autoIncrement']) && $attrs['attrs']['autoIncrement'] == 'true') // auto increment
+            $return .= ' AUTO_INCREMENT';
         if (!$isCreate) {
             if (!empty($attrs['attrs']['after']))
                 $return .= ' AFTER `' . $attrs['attrs']['after'] . '`';
             else if (isset($attrs['attrs']['first']) && $attrs['attrs']['first'])
                 $return .= ' FIRST';
         }
-        if (isset($attrs['attrs']['autoIncrement']) && $attrs['attrs']['autoIncrement'] == 'true') // auto increment
-            $return .= ' AUTO_INCREMENT';
 
         if (isset($attrs['attrs']['onUpdate'])) // auto increment
             $return .= ' ON UPDATE ' . $attrs['attrs']['onUpdate'];
@@ -320,6 +320,18 @@ abstract class Mapper extends Row {
         return strtoupper($attrs['type']);
     }
 
+    private function getClassPath($fullyQualifiedClassName) {
+        if (MODULES || VENDOR) {
+            return (MODULES && is_readable(MODULES . str_replace('\\', '/', $fullyQualifiedClassName) . '.php')) ?
+                    MODULES . str_replace('\\', '/', $fullyQualifiedClassName) . '.php' :
+                    VENDOR . str_replace('\\', '/', $fullyQualifiedClassName) . '.php';
+        }
+        else {
+            return dirname(dirname(dirname(dirname(__DIR__)))) .
+                    str_replace('\\', '/', $fullyQualifiedClassName) . '.php';
+        }
+    }
+
     /**
      * Checks if the table is uptodate with the mapper settings
      * @param string $path Path to save the schema to
@@ -327,7 +339,7 @@ abstract class Mapper extends Row {
      * @return boolean
      */
     private function isUpToDate($path, Table &$table) {
-        $return = null;
+        $classPath = $this->getClassPath(get_called_class());
         // update if any parent is changed
         foreach (class_parents(get_called_class()) as $parent) {
             if ($parent === get_class())
@@ -338,12 +350,10 @@ abstract class Mapper extends Row {
                     ), array(
                 'd-scribe/core/src', 'd-scribe/db-scribe/src', 'd-scribe/ds-live/src'
                     ), $parent);
-            $parentPath = (is_readable(MODULES . str_replace('\\', '/', $parent) . '.php')) ?
-                    MODULES . str_replace('\\', '/', $parent) . '.php' :
-                    VENDOR . str_replace('\\', '/', $parent) . '.php';
 
+            $parentPath = $this->getClassPath($parent);
             if (!is_readable($path) ||
-                    (is_readable($path) && is_readable($parentPath) && filemtime($path) < filemtime($parentPath))) {
+                    (is_readable($path) && is_readable($parentPath) && filemtime($classPath) < filemtime($parentPath))) {
                 $return = $this->prepareUpdate($path, $table);
                 break;
             }
@@ -355,6 +365,12 @@ abstract class Mapper extends Row {
             $return = $this->prepareUpdate($path, $table);
         }
 
+        if (count($this->getSettings()) !== count($table->getColumns(true))) {
+            foreach ($this->getModelTable($this->getTableName()) as $class) {
+                unlink(DATA . 'mapper' . DIRECTORY_SEPARATOR . str_replace('\\', '.', $class));
+            }
+            return $this->isUpToDate($path, $table);
+        }
         if (!$this->ignore()) {
             $this->updateReferences($table);
         }
@@ -372,10 +388,11 @@ abstract class Mapper extends Row {
                     continue;
 
                 $refTable = new Table($ref['refTable'], $table->getConnection());
-                $modelArray = self::getModelTable($ref['refTable']);
-                if (!empty($modelArray)) {
-                    $mapper = new $modelArray[0];
-
+                $modelClass = self::getModelTable($ref['refTable']);
+                if (!empty($modelClass)) {
+                    $mapper = is_array($modelClass) ?
+                            new $modelClass[count($modelClass) - 1] :
+                            new $modelClass;
                     $mapper->setConnection($table->getConnection());
                     $mapper->init($refTable, $this->getIgnore());
                 }
@@ -402,6 +419,7 @@ abstract class Mapper extends Row {
             if ($table->exists()) {
                 $liveDesc = true;
                 foreach ($table->getColumns() as $columnName => $info) {
+                    $columnName = Util::_toCamel($columnName);
                     $type = ucfirst(preg_filter('/[^a-zA-Z]/', '', $info['colType']));
                     $size = preg_filter('/[^0-9]/', '', $info['colType']);
                     switch (strtolower($type)) {
@@ -451,6 +469,8 @@ abstract class Mapper extends Row {
         $toDo = array('new' => array(), 'update' => array(), 'remove' => array());
 
         foreach ($newDesc as $property => $annotArray) {
+            if (!$property)
+                continue;
             $_property = Util::camelTo_($property);
             if (!isset($oldDesc[$property])) {
                 $toDo['new'][$_property] = $annotArray;
@@ -644,12 +664,14 @@ abstract class Mapper extends Row {
     protected function _call(&$name, array &$args) {
         if (!method_exists($this, $name)) {
             $modelTable = self::getModelTable(Util::camelTo_($name));
-            if (is_array($modelTable) && !empty($modelTable)) {
+            if (!empty($modelTable)) {
                 if (!$this->getConnection())
                     $this->setConnection($this->_table->getConnection());
 
                 $relTable = $this->getConnection()->table(Util::camelTo_($name));
-                $model = new $modelTable[0];
+                $model = is_array($modelTable) ?
+                        new $modelTable[count($modelTable) - 1] :
+                        new $modelTable;
                 $model->setConnection($this->getConnection());
 
                 $model->init($relTable);
@@ -675,15 +697,19 @@ abstract class Mapper extends Row {
      */
     private function parseAnnotations(array $annotations, $createReference = true) {
         $return = $defer = $primary = array();
-        $prev = null;
+        $first = $prev = null;
         foreach ($annotations as $property => $annotArray) {
             if (!is_array($annotArray))
                 continue;
 
             foreach ($annotArray as &$desc) {
                 $desc = $this->parseSettings(substr($desc, 1));
-                if ($prev && !@$desc['attrs']['primary']) {
+                if ($prev && !$desc['attrs']['primary']) {
                     $desc['attrs']['after'] = $prev;
+                }
+                else if (!$prev && !$desc['attrs']['primary']) {
+                    $desc['attrs']['first'] = true;
+                    $first = $property;
                 }
 
                 $prev = Util::camelTo_($property);
@@ -694,6 +720,11 @@ abstract class Mapper extends Row {
                 if (isset($desc['attrs']['primary']) && $desc['attrs']['primary']) {
                     $primary['column'] = $property;
                     $desc['attrs']['first'] = true;
+                    if ($first) {
+                        $return[$first]['attrs']['after'] = Util::camelTo_($property);
+                        unset($return[$first]['attrs']['first']);
+                        $first = $property;
+                    }
                     $primary['desc'] = $desc;
                 }
 
@@ -704,9 +735,19 @@ abstract class Mapper extends Row {
 
         foreach ($defer as $property => &$desc) {
             $desc = $this->parseForReference($property, $desc, $primary, $createReference);
+            if ($desc['attrs']['first'] && !$return[$property]['attrs']['first'])
+                unset($desc['attrs']['first']);
+            if ($return[$property]['attrs']['after'])
+                $desc['attrs']['after'] = $return[$property]['attrs']['after'];
         }
 
-        return array_merge($return, $defer);
+        $f = array();
+        if ($first) {
+            $f[$first] = $return[$first];
+            unset($return[$first]);
+        }
+
+        return array_merge($f, $return, $defer);
     }
 
     private function parseForReference($property, $oDesc, $primary, $createReference) {
@@ -718,9 +759,6 @@ abstract class Mapper extends Row {
             unset($desc['attrs']['reference']);
             $desc['type'] = 'ReferenceMany';
         }
-        unset($desc['attrs']['first']);
-        unset($desc['attrs']['after']);
-
         return $desc;
     }
 
@@ -832,8 +870,9 @@ abstract class Mapper extends Row {
 
             if (!array_key_exists($annot['attrs']['property'], $conTable->getIndexes())) {
                 $conTable->addIndex($annot['attrs']['property']);
-                if ($conTable->exists())
+                if ($conTable->exists()) {
                     $this->_table->getConnection()->alterTable($conTable);
+                }
             }
             $attrs = $refTable->getSettings(\Util::_toCamel($annot['attrs']['property']));
             $conColumns = $conTable->getColumns();
@@ -893,9 +932,8 @@ abstract class Mapper extends Row {
         if (is_readable($mt))
             $modelTables = include $mt;
 
-        if (!isset($modelTables[$tableName]) ||
-                (isset($modelTables[$tableName]) && !in_array($modelClass, $modelTables[$tableName]))) {
-            $modelTables[$tableName][] = $modelClass;
+        if (!$modelTables[$tableName] || ($modelTables[$tableName] && is_a($this, $modelTables[$tableName]))) {
+            $modelTables[$tableName] = $modelClass;
             return file_put_contents($mt, '<' . '?php' . "\n\t" . 'return ' . stripslashes(var_export($modelTables, true)) . ";");
         }
 
@@ -995,7 +1033,7 @@ abstract class Mapper extends Row {
      * 
      * Straightens out ReferenceMany into ArrayCollection
      */
-    public function postFetch() {
+    public function postFetch($property = null) {
         if (!empty($this->settings)) {
             foreach ($this->settings as $column => $descArray) {
                 if ($descArray['type'] === 'ReferenceMany') {
