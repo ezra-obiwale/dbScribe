@@ -4,10 +4,10 @@ namespace DBScribe;
 
 class Row implements \JsonSerializable {
 
-    private $connection;
-    private $relationships = array();
-    private $by;
-    private $content;
+    private $_connection;
+    private $_relationships = array();
+    private $_by;
+    private $_content;
 
     /**
      *
@@ -69,12 +69,12 @@ class Row implements \JsonSerializable {
      */
     public function toArray() {
         $ppts = get_object_vars($this);
-        unset($ppts['connection']);
-        unset($ppts['relationships']);
+        unset($ppts['_connection']);
+        unset($ppts['_relationships']);
         unset($ppts['_tableName']);
-        unset($ppts['by']);
+        unset($ppts['_by']);
         unset($ppts['_table']);
-        unset($ppts['content']);
+        unset($ppts['_content']);
         return $ppts;
     }
 
@@ -102,7 +102,7 @@ class Row implements \JsonSerializable {
      * @return \DBScribe\Row
      */
     final public function setConnection(Connection $connection) {
-        $this->connection = $connection;
+        $this->_connection = $connection;
         return $this;
     }
 
@@ -112,7 +112,7 @@ class Row implements \JsonSerializable {
      * @return \DBScribe\Row
      */
     final public function setRelationships(array $relationships) {
-        $this->relationships = $relationships;
+        $this->_relationships = $relationships;
         return $this;
     }
 
@@ -122,7 +122,7 @@ class Row implements \JsonSerializable {
      * @return array
      */
     public function getRelationship($tableName) {
-        return @$this->relationships[$tableName];
+        return @$this->_relationships[$tableName];
     }
 
     /**
@@ -165,26 +165,26 @@ class Row implements \JsonSerializable {
             return $return;
 
         if (!method_exists($this, $name)) {
-            if ($this->connection === null && $this->_table) {
-                $this->connection = $this->_table->getConnection();
+            if ($this->_connection === null && $this->_table) {
+                $this->_connection = $this->_table->getConnection();
             }
 
             $where = array();
-            if ($this->connection !== null) {
-                $_name = $this->connection->getTablePrefix() . Util::camelTo_($name);
+            if ($this->_connection !== null) {
+                $_name = $this->_connection->getTablePrefix() . Util::camelTo_($name);
                 if (substr($name, 0, 2) == 'by') {
-                    if ($this->connection !== null) {
-                        $relTable = call_user_func_array(array($this->connection, 'table'), array($_name, $this->getRelTableModel($args)));
+                    if ($this->_connection !== null) {
+                        $relTable = call_user_func_array(array($this->_connection, 'table'), array($_name, $this->getRelTableModel($args)));
                         if (!$relTable->exists()) {
-                            $this->by = lcfirst(substr($name, 2));
+                            $this->_by = lcfirst(substr($name, 2));
                         }
                         return $this;
                     }
                 }
 
-                if (isset($this->relationships[$_name])) {
-                    $by = Util::camelTo_($this->by);
-                    foreach ($this->relationships[$_name] as $relationships) {
+                if (isset($this->_relationships[$_name])) {
+                    $by = Util::camelTo_($this->_by);
+                    foreach ($this->_relationships[$_name] as $relationships) {
                         if ($by && $relationships['column'] !== $by) {
                             continue;
                         }
@@ -202,7 +202,7 @@ class Row implements \JsonSerializable {
                     $where = $args['relateWhere'];
                 }
 
-                $this->by = null;
+                $this->_by = null;
             }
             if (empty($where))
                 return new ArrayCollection;
@@ -214,11 +214,11 @@ class Row implements \JsonSerializable {
             }
             // select from required table if not joined
             if (!$return) {
-                if ($this->connection === null)
+                if ($this->_connection === null)
                     return null;
 
                 if (!isset($relTable))
-                    $relTable = call_user_func_array(array($this->connection, 'table'), array(Util::camelTo_($name), $this->getRelTableModel($args)));
+                    $relTable = call_user_func_array(array($this->_connection, 'table'), array(Util::camelTo_($name), $this->getRelTableModel($args)));
 
 
                 $return = $this->prepSelectRelTable($relTable, $args)->select($where, isset($args[0]['returnType']) ? $args[0]['returnType'] : Table::RETURN_MODEL);
@@ -345,7 +345,7 @@ class Row implements \JsonSerializable {
      * @return \DBScribe\Connection|null
      */
     final protected function getConnection() {
-        return $this->connection;
+        return $this->_connection;
     }
 
     /**
@@ -353,7 +353,7 @@ class Row implements \JsonSerializable {
      * @return array
      */
     final protected function getRelationships() {
-        return $this->relationships;
+        return $this->_relationships;
     }
 
     /**
@@ -379,7 +379,7 @@ class Row implements \JsonSerializable {
      * @param string $property Property to act on
      */
     public function postFetch($property = null) {
-        $this->content = get_object_vars($this);
+        $this->_content = get_object_vars($this);
     }
 
     /**
@@ -388,7 +388,7 @@ class Row implements \JsonSerializable {
      * @return mixed
      */
     final public function getDBValue($property) {
-        return $this->content[$property];
+        return $this->_content[$property];
     }
 
     final public function setTable(Table $table) {
