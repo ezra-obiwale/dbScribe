@@ -217,7 +217,7 @@ abstract class Mapper extends Row {
                 $table->setPrimaryKey($dbColumnName);
             }
 
-            if (isset($descArray['attrs']['reference']) && $descArray['type'] !== 'ReferenceMany') {
+            if (isset($descArray['attrs']['reference'])) { // Reference not ReferenceMany
                 $onDelete = (isset($descArray['attrs']['reference']['onDelete'])) ?
                         $descArray['attrs']['reference']['onDelete'] : 'RESTRICT';
                 $onUpdate = (isset($descArray['attrs']['reference']['onUpdate'])) ?
@@ -300,8 +300,7 @@ abstract class Mapper extends Row {
             else if (isset($attrs['attrs']['first']) && $attrs['attrs']['first'])
                 $return .= ' FIRST';
         }
-
-        if (isset($attrs['attrs']['onUpdate'])) // auto increment
+        if (isset($attrs['attrs']['onUpdate']) && $attrs['type'] !== 'ReferenceMany') // auto increment
             $return .= ' ON UPDATE ' . $attrs['attrs']['onUpdate'];
 
         return $return;
@@ -340,6 +339,7 @@ abstract class Mapper extends Row {
      */
     private function isUpToDate($path, Table &$table) {
         $classPath = $this->getClassPath(get_called_class());
+        $return = null;
         // update if any parent is changed
         foreach (class_parents(get_called_class()) as $parent) {
             if ($parent === get_class())
@@ -661,7 +661,7 @@ abstract class Mapper extends Row {
      * @param string $name
      * @param array $arguments
      */
-    protected function _call(&$name, array &$args) {
+    protected function _preCall(&$name, array &$args) {
         if (!method_exists($this, $name)) {
             $modelTable = self::getModelTable(Util::camelTo_($name));
             if (!empty($modelTable)) {
@@ -713,7 +713,7 @@ abstract class Mapper extends Row {
                 }
 
                 $prev = Util::camelTo_($property);
-                if ((strtolower($desc['type']) === 'reference' || strtolower($desc['type']) === 'referencemany')) {
+                if (strtolower($desc['type']) === 'reference' || strtolower($desc['type']) === 'referencemany') {
                     $defer[$property] = $desc;
                 }
 
@@ -965,6 +965,7 @@ abstract class Mapper extends Row {
      * Turns empty values to null
      */
     public function preSave() {
+        $this->getSettings();
         foreach ($this->toArray() as $ppt => $val) {
             $settingKey = \Util::_toCamel($ppt);
             if (@$this->settings[$settingKey]['type'] === 'ReferenceMany' && !empty($val)) {
@@ -1012,7 +1013,8 @@ abstract class Mapper extends Row {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d H:i:s');
                 $val = $this->$settingKey;
             }
-            elseif (empty($val) && $val != 0) {
+
+            if (empty($val) && $val != 0) {
                 if (!property_exists($this, $ppt))
                     $ppt = Util::_toCamel($ppt);
                 $this->$ppt = null;

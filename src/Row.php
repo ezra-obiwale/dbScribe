@@ -161,9 +161,8 @@ class Row implements \JsonSerializable {
      * @return null
      */
     final public function __call($name, $args) {
-        if (NULL !== $return = $this->_call($name, $args))
+        if (NULL !== ($return = $this->_preCall($name, $args)))
             return $return;
-
         if (!method_exists($this, $name)) {
             if ($this->_connection === null && $this->_table) {
                 $this->_connection = $this->_table->getConnection();
@@ -218,10 +217,10 @@ class Row implements \JsonSerializable {
                     return null;
 
                 if (!isset($relTable))
-                    $relTable = call_user_func_array(array($this->_connection, 'table'), array(Util::camelTo_($name), $this->getRelTableModel($args)));
-
-
-                $return = $this->prepSelectRelTable($relTable, $args)->select($where, isset($args[0]['returnType']) ? $args[0]['returnType'] : Table::RETURN_MODEL);
+                    $relTable = call_user_func_array(array($this->_connection, 'table'), array(Util::camelTo_($name)));
+                $relTable->setRowModel($this->getRelTableModel($args));
+                $return = $this->prepSelectRelTable($relTable, $args)
+                        ->select($where, isset($args[0]['returnType']) ? $args[0]['returnType'] : Table::RETURN_MODEL);
                 if (is_bool($return)) {
                     return new ArrayCollection;
                 }
@@ -229,6 +228,15 @@ class Row implements \JsonSerializable {
 
             return $return;
         }
+    }
+
+    /**
+     * Called before using the magic method __call()
+     * @param type $name
+     * @param array $args
+     */
+    protected function _preCall(&$name, array &$args) {
+        
     }
 
     /**
@@ -329,15 +337,6 @@ class Row implements \JsonSerializable {
         }
 
         return $where;
-    }
-
-    /**
-     * Replace magic method __call() for children classes
-     * @param type $name
-     * @param array $args
-     */
-    protected function _call(&$name, array &$args) {
-        
     }
 
     /**

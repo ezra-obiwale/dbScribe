@@ -222,9 +222,8 @@ class Table {
     protected $customWhere;
 
     /**
-     * Indicates conditions have been attached to the query. This does not take
-     * the customWhere into cognizance
-     * @var boolean 
+     * Conditions to attach to the query
+     * @var string 
      */
     protected $where;
 
@@ -273,7 +272,7 @@ class Table {
         $this->doPost = false;
         $this->return = Table::RETURN_MODEL;
         $this->delayExecute = false;
-        $this->where = false;
+        $this->where = null;
         $this->groups = array();
         $this->orderBy = array();
         $this->joins = array();
@@ -912,20 +911,11 @@ class Table {
 
         $this->query = 'SELECT ' . $this->prepareColumns();
         $this->query .= ' FROM `' . $this->name . '`' . $this->processJoins();
+        
+        if ($this->where)
+            $this->where .= ' AND (';
         $this->queryWhere($criteria);
 
-        if ($this->groups) {
-            $this->query .= ' GROUP BY ';
-            foreach ($this->groups as $ky => $column) {
-                if ($ky)
-                    $this->query .= ', ';
-                $this->query .= '`' . $this->name . '`.`' . $column . '`';
-            }
-        }
-
-        if ($this->having) {
-            $this->query .= ' HAVING ' . $this->having;
-        }
         $this->return = $return;
         if ($this->delayExecute) {
             return $this;
@@ -933,31 +923,41 @@ class Table {
         return $this->execute();
     }
 
-    private function queryWhere(array $criteria) {
-        if (!empty($criteria))
-            $this->where = true;
+    /**
+     * Create the where part of the query
+     * @param array $criteria Array of row column array
+     * @param bool $notEqual Indicates whether to equate the give value to actual
+     * column value
+     */
+    private function queryWhere(array $criteria, $notEqual = false) {
+        if (!empty($criteria) && !$this->where)
+            $this->where = '';
 
         foreach ($criteria as $ky => $row) {
-            if ($ky == 0)
-                $this->query .= ' WHERE (';
-            else
-                $this->query .= ' OR (';
+            if (empty($this->where))
+                $this->where .= ' WHERE (';
+            else if ($ky)
+                $this->where .= ' OR (';
 
             $rowArray = $this->checkModel($row);
             $cnt = 1;
             foreach ($rowArray as $column => $value) {
                 if (!is_array($value)) {
-                    $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` = ?';
+                    $this->where .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` ';
+                    $this->where .= ($notEqual) ? '!=' : '=';
+                    $this->where .= ' ?';
                     if (count($rowArray) > $cnt)
-                        $this->query .= ' AND ';
+                        $this->where .= ' AND ';
                     $this->values[] = $value;
                 }
                 else {
-                    $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` IN (\'' . join('\', \'', $value) . '\')';
+                    $this->where .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` ';
+                    $this->where .= ($notEqual) ? 'NOT IN' : 'IN';
+                    $this->where .= ' (\'' . join('\', \'', $value) . '\')';
                 }
                 $cnt++;
             }
-            $this->query .= ')';
+            $this->where .= ')';
         }
     }
 
@@ -996,7 +996,6 @@ class Table {
                 $return = $forThis;
                 break;
         }
-
         return $return;
     }
 
@@ -1029,6 +1028,102 @@ class Table {
      */
     public function like($column, $value, $logicalAnd = true) {
         $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where it is NOT LIKE the value, i.e. it does not contain
+     *  the given value 
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function notLike($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Query the table where the given values are not equal to the corresponding
+     * column value in the table
+     * @param array $criteria
+     * @return \DBScribe\Table
+     */
+    public function notEqual(array $criteria) {
+        $this->queryWhere($criteria, true);
+        return $this;
+    }
+
+    /**
+     * Select a column where the value matches the regular expression
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function regExp($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` REGEXP "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the value does not match the regular expression
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function notRegExp($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT REGEXP "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the value is null
+     * @param string $column
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function isNull($column, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IS NULL', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the value is not null
+     * @param string $column
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function isNotNull($column, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IS NOT NULL', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the values of the given columns are null
+     * @param string $columns
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function areNull(array $columns, $logicalAnd = true) {
+        foreach ($columns as $column) {
+            $this->isNull($column, $logicalAnd);
+        }
+        return $this;
+    }
+
+    /**
+     * Select a column where the values of the given columns are not null
+     * @param string $columns
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function areNotNull(array $columns, $logicalAnd = true) {
+        foreach ($columns as $column) {
+            $this->isNotNull($column, $logicalAnd);
+        }
         return $this;
     }
 
@@ -1075,7 +1170,7 @@ class Table {
     }
 
     /**
-     * Fetch results that whose data in the given column is in the given array
+     * Fetch results whose data in the given column is in the given array
      * of values
      * @param string $column
      * @param array $values
@@ -1085,6 +1180,20 @@ class Table {
      */
     public function in($column, array $values, $logicalAnd = true) {
         $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IN ("' . join('","', $values) . '")', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Fetch results whose data in the given column are in the given array
+     * of values
+     * @param string $column
+     * @param array $values
+     * @param boolean $logicalAnd Indicates whether to join the in query to the
+     * rest of the query with an AND (TRUE) or an OR (FALSE)
+     * @return \DBScribe\Table
+     */
+    public function notIn($column, array $values, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT IN ("' . join('","', $values) . '")', $logicalAnd ? 'AND' : 'OR');
         return $this;
     }
 
@@ -1296,18 +1405,6 @@ class Table {
         $this->query = 'SELECT DISTINCT `' . $this->name . '`.`' . Util::camelTo_($column) . '` as ' . Util::_toCamel($column) . ' FROM `' . $this->name . '` ' . $this->joinQuery;
         $this->queryWhere($criteria);
 
-        if ($this->groups) {
-            $this->query .= ' GROUP BY ';
-            foreach ($this->groups as $ky => $column) {
-                if ($ky)
-                    $this->query .= ', ';
-                $this->query .= '`' . $this->name . '`.`' . $column . '`';
-            }
-        }
-
-        if ($this->having) {
-            $this->query .= ' HAVING ' . $this->having;
-        }
         return $this->execute();
     }
 
@@ -1406,6 +1503,7 @@ class Table {
      * @param array $values
      * @param string|integer|array $whereColumn
      * @return boolean
+     * @todo Refactor to accomodate large bulk of data
      */
     public function upsert(array $values, $whereColumn = 'id') {
         $select = $existing = array();
@@ -1431,24 +1529,23 @@ class Table {
             }
         }
         $update = $insert = array();
-        foreach ($values as $ky => $vals) {
+        foreach ($values as $ky => $valus) {
             $up = true;
             foreach ($whereColumn as $where) {
-                if (!in_array($vals[$where], $existing)) {
+                if (!in_array($valus[$where], $existing)) {
                     $up = false;
                     break;
                 }
             }
             if ($up) {
-                $update[] = $vals;
+                $update[] = $valus;
             }
             else {
-                if (!isset($vals[$this->getPrimaryKey()])) {
-                    //@todo check type of primary key to determine what to assign
-                    // to it
-                    $vals[$this->getPrimaryKey()] = Util::createGUID();
+                if (!isset($valus[$this->getPrimaryKey()]) &&
+                        $this->columns[$this->getPrimaryKey()]['extra'] !== 'AUTO_INCREMENT') {
+                    $valus[$this->getPrimaryKey()] = Util::createGUID();
                 }
-                $insert[] = $vals;
+                $insert[] = $valus;
             }
         }
 
@@ -1545,7 +1642,7 @@ class Table {
 
             return false;
         }
-
+        $this->query .= $this->where;
         if (!empty($this->customWhere)) {
             if ($this->where) {
                 $this->query .= ' ' . $this->customWhereJoin . ' ' . $this->customWhere;
@@ -1554,7 +1651,19 @@ class Table {
                 $this->query .= ' WHERE ' . $this->customWhere;
             }
         }
-
+        if ($this->current === self::OP_SELECT) {
+            if ($this->groups) {
+                $this->query .= ' GROUP BY ';
+                foreach ($this->groups as $ky => $column) {
+                    if ($ky)
+                        $this->query .= ', ';
+                    $this->query .= '`' . $this->name . '`.`' . $column . '`';
+                }
+            }
+            if ($this->having) {
+                $this->query .= ' HAVING ' . $this->having;
+            }
+        }
         if (!empty($this->orderBy)) {
             $this->query .= ' ORDER BY ';
             foreach ($this->orderBy as $ky => $order) {
@@ -1591,7 +1700,7 @@ class Table {
         $this->orderBy = array();
         $this->limit = null;
         $this->customWhere = null;
-        $this->where = false;
+        $this->where = null;
         $this->having = null;
         $this->groups = array();
         $this->current = null;

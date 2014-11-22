@@ -399,8 +399,6 @@ class Connection extends \PDO {
                 if ($qry)
                     $qry .= ',';
                 $qry .= ' ADD COLUMN `' . $column . '` ' . $desc;
-                if ($column == $table->getNewPrimarykey())
-                    $qry .= ' FIRST';
             }
             $cnt++;
         }
