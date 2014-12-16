@@ -112,4 +112,73 @@ class Util {
         return $return;
     }
 
+    /**
+     * Updates a configuration file
+     * @param string $path Full path to the configuration file
+     * @param array $data Array of data to add/change in the config
+     * @param boolean $recursiveMerge Indicates whether the data should be merge deeply
+     * @param array $configArray Array of config to store into path. If this is not NULL,
+     * the config file will be overwritten with the array
+     * @return boolean
+     */
+    public static function updateConfig($path, array $data = array(), $recursiveMerge = false, $configArray = null) {
+        if (is_null($configArray)) {
+            if (is_readable($path))
+                $configArray = include $path;
+            else {
+                $configArray = array();
+            }
+        }
+        $config = ($recursiveMerge) ? array_replace_recursive($configArray, $data) : array_replace($configArray, $data);
+        $content = str_replace("=> \n", '=>', var_export($config, true));
+        return (file_put_contents($path, '<' . '?php' . "\r\n\treturn " . $content . ';') === FALSE) ? false : true;
+    }
+
+    /**
+     * Search an array to see if it has the expected value [at the given key]
+     * @param array $array
+     * @param mixed $value Could be an array of values
+     * @param bool $recursive
+     * @param mixed $key Could be an array of keys
+     * @param bool $multiple Indicates whether to return all found arrays or just one - the first
+     * @return array|null The array containing the expected value
+     */
+    public static function searchArray(array $array, $value, $recursive = false, $key = array(), $multiple = false) {
+        if (!is_array($value))
+            $value = array($value);
+        if ($key !== null && !is_array($key))
+            $key = array($key);
+        else if ($key === null)
+            $key = array();
+        $found = array();
+        foreach ($array as $ky => $val) {
+            if (is_array($val)) {
+                if (!$recursive)
+                    continue;
+                $ret = static::searchArray($val, $value, $recursive, $key, $multiple);
+                if (count($ret)) {
+                    if ($multiple)
+                        $found = array_merge($found, $ret);
+                    else
+                        return $ret;
+                }
+                continue;
+            }
+            if (count($key) && !in_array($ky, $key))
+                continue;
+
+            $keys = array_flip($key);
+            if ($val === $value[$keys[$ky]]) {
+                if ($multiple) {
+                    $k = ($multiple === true) ? 0 : $array[$multiple];
+                    $found[$k] = $array;
+                }
+                else
+                    return $array;
+            }
+        }
+
+        return $found;
+    }
+
 }

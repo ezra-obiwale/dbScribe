@@ -29,9 +29,6 @@ abstract class Mapper extends Row {
      * @param Table $table Live table connection
      */
     public function init(Table &$table) {
-        if (!defined('DATA'))
-            define('DATA', __DIR__);
-
         $this->_table = & $table;
         $className = str_replace('\\', '.', get_called_class());
         $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . $className;
@@ -663,28 +660,25 @@ abstract class Mapper extends Row {
      */
     protected function _preCall(&$name, array &$args) {
         if (!method_exists($this, $name)) {
-            $modelTable = self::getModelTable(Util::camelTo_($name));
-            if (!empty($modelTable)) {
-                if (!$this->getConnection())
-                    $this->setConnection($this->_table->getConnection());
-
-                $relTable = $this->getConnection()->table(Util::camelTo_($name));
+            if ($modelTable = self::getModelTable(Util::camelTo_($name))) {
+                $relTable = $this->getConnection()->table($name);
                 $model = is_array($modelTable) ?
                         new $modelTable[count($modelTable) - 1] :
                         new $modelTable;
                 $model->setConnection($this->getConnection());
-
                 $model->init($relTable);
                 $args['model'] = $model;
             }
-            $settings = $this->getSettings();
-            if (@$settings[$name]['type'] === 'ReferenceMany') {
-                $args['relateWhere'] = array();
-                $nam = (!is_array($this->$name)) ? explode('__:DS:__', $this->$name) : $this->$name;
-                foreach ($nam as $val) {
-                    $args['relateWhere'][] = array(
-                        $this->settings[$name]['attrs']['column'] => $val,
-                    );
+            
+            foreach($this->getSettings() as $column => $rel) {
+                if ($rel['type'] === 'ReferenceMany') {
+                    $args['relateWhere'] = array();
+                    $nam = (!is_array($this->$column)) ? explode('__:DS:__', $this->$column) : $this->$column;
+                    foreach ($nam as $val) {
+                        $args['relateWhere'][] = array(
+                            $this->settings[$column]['attrs']['column'] => $val,
+                        );
+                    }
                 }
             }
         }
@@ -1102,21 +1096,6 @@ abstract class Mapper extends Row {
         return $this->_table;
     }
 
-    final public function getRelationship($tableName) {
-        $return = parent::getRelationship($tableName);
-        if (!$return && $settings = $this->getSettings(Util::_toCamel($tableName))) {
-            if ($settings['type'] == 'ReferenceMany') {
-                $return = array(
-                    array(
-                        'column' => $tableName,
-                        'refColumn' => $settings['attrs']['column'],
-                    )
-                );
-            }
-        }
-        return $return;
-    }
-
     /**
      * Fetches an array of properties and their values
      * @param boolean $withNull Indicates whether to return properties with null values too
@@ -1126,7 +1105,7 @@ abstract class Mapper extends Row {
      */
     public function toArray($withNull = false, $asIs = false) {
         $array = parent::toArray();
-        unset($array['tableName']);
+        unset($array['_table']);
 
         if ($asIs) {
             return $array;
