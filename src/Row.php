@@ -5,7 +5,6 @@ namespace DBScribe;
 class Row implements \JsonSerializable {
 
     private $_connection;
-    private $_relationships = array();
     private $_by;
     private $_content;
 
@@ -70,7 +69,6 @@ class Row implements \JsonSerializable {
     public function toArray() {
         $ppts = get_object_vars($this);
         unset($ppts['_connection']);
-        unset($ppts['_relationships']);
         unset($ppts['_tableName']);
         unset($ppts['_by']);
         unset($ppts['_table']);
@@ -107,32 +105,13 @@ class Row implements \JsonSerializable {
     }
 
     /**
-     * Sets the relationships which row may reach out to
-     * @param array $relationships
-     * @return \DBScribe\Row
-     */
-    final public function setRelationships(array $relationships) {
-        $this->_relationships = $relationships;
-        return $this;
-    }
-
-    /**
-     * Fetches the relationship between this table and the given table
-     * @param string $tableName Name of the table to get the relationship
-     * @return array
-     */
-    public function getRelationship($tableName) {
-        return @$this->_relationships[$tableName];
-    }
-
-    /**
      * Allows setting properties of the class publicly
      * @param string $property
      * @param mixed $value
      * @throws \Exception
      */
     final public function __set($property, $value) {
-        if (in_array($property, array('_connection', '_relationships')))
+        if (in_array($property, array('_connection')))
             throw new \Exception('Property "' . $property . '" is reserved.');
         $this->_set($property, $value);
     }
@@ -161,67 +140,73 @@ class Row implements \JsonSerializable {
      * @return null
      */
     final public function __call($name, $args) {
-        if (NULL !== $return = $this->_call($name, $args))
-            return $return;
-
         if (!method_exists($this, $name)) {
-            if ($this->_connection === null && $this->_table) {
+            if (!$this->_connection && $this->_table) {
                 $this->_connection = $this->_table->getConnection();
             }
-
-            $where = array();
-            if ($this->_connection !== null) {
-                $_name = $this->_connection->getTablePrefix() . Util::camelTo_($name);
-                if (substr($name, 0, 2) == 'by') {
-                    if ($this->_connection !== null) {
-                        $relTable = call_user_func_array(array($this->_connection, 'table'), array($_name, $this->getRelTableModel($args)));
-                        if (!$relTable->exists()) {
-                            $this->_by = lcfirst(substr($name, 2));
-                        }
-                        return $this;
-                    }
-                }
-
-                if (isset($this->_relationships[$_name])) {
-                    $by = Util::camelTo_($this->_by);
-                    foreach ($this->_relationships[$_name] as $relationships) {
-                        if ($by && $relationships['column'] !== $by) {
-                            continue;
-                        }
-
-                        $column = Util::_toCamel($relationships['column']);
-                        if (isset($args[0]['push']) && $args[0]['push'] && !$relationships['push'] ||
-                                isset($args[0]['pull']) && $args[0]['pull'] && $relationships['push'])
-                            continue;
-                        if (property_exists($this, $column)) {
-                            $where = array_merge($where, $this->getRelTableWhere($args, $relationships['refColumn'], $this->{$column}));
-                        }
-                    }
-                }
-                else if (isset($args['relateWhere']) && is_array($args['relateWhere'])) {
-                    $where = $args['relateWhere'];
-                }
-
-                $this->_by = null;
+            else if (!$this->_table && $this->_connection) {
+                $this->_table = $this->_connection->table($this->getTableName(), $this);
             }
+            else if (!$this->_connection && !$this->_table) {
+                return new ArrayCollection;
+            }
+        }
+        if (NULL !== ($return = $this->_preCall($name, $args))) {
+            return $return;
+        }
+        if (!method_exists($this, $name)) {
+            $where = array();
+            $_name = $this->_connection->getTablePrefix() . Util::camelTo_($name);
+            if (substr($name, 0, 2) == 'by') {
+                $relTable = $this->_connection->table($name);
+                $relTable->setRowModel($this->getRelTableModel($args));
+                if (!$relTable->exists()) {
+                    $this->_by = lcfirst(substr($name, 2));
+                }
+                return $this;
+            }
+
+            if ($relationships = $this->_table->getTableRelationships($_name)) {
+                $by = Util::camelTo_($this->_by);
+                foreach ($relationships as $relationship) {
+                    if ($by && $relationship['column'] !== $by) {
+                        continue;
+                    }
+
+                    $column = Util::_toCamel($relationship['column']);
+                    if (isset($args[0]['push']) && $args[0]['push'] && !$relationship['push'] ||
+                            isset($args[0]['pull']) && $args[0]['pull'] && $relationship['push'])
+                        continue;
+                    if (property_exists($this, $column)) {
+                        $where = array_merge($where, $this->getRelTableWhere($args, $relationship['refColumn'], $this->{$column}));
+                    }
+                }
+            }
+            else if (isset($args['relateWhere']) && is_array($args['relateWhere'])) {
+                $where = $args['relateWhere'];
+            }
+
+            $this->_by = null;
             if (empty($where))
                 return new ArrayCollection;
 
             // check joined tables' results
-            if ($this->_table) {
-                $compressed = Util::compressArray($where);
-                $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args), $args);
-            }
+            $compressed = Util::compressArray($where);
+            $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args), $args);
+
             // select from required table if not joined
             if (!$return) {
-                if ($this->_connection === null)
-                    return null;
-
-                if (!isset($relTable))
-                    $relTable = call_user_func_array(array($this->_connection, 'table'), array(Util::camelTo_($name), $this->getRelTableModel($args)));
-
-
-                $return = $this->prepSelectRelTable($relTable, $args)->select($where, isset($args[0]['returnType']) ? $args[0]['returnType'] : Table::RETURN_MODEL);
+                if (!isset($relTable)) {
+                    $relTable = $this->_connection->table(Util::camelTo_($name));
+                    $relTable->setRowModel($this->getRelTableModel($args));
+                }
+                $relTable->where($where)
+                        ->setExpectedResult(isset($args[0]['returnType']) ?
+                                        $args[0]['returnType'] : Table::RETURN_MODEL);
+                $return = $this->prepSelectRelTable($relTable, $args);
+                if (is_object($return) && is_a($return, 'DBScribe\Table')) {
+                    $return = $return->select();
+                }
                 if (is_bool($return)) {
                     return new ArrayCollection;
                 }
@@ -232,46 +217,29 @@ class Row implements \JsonSerializable {
     }
 
     /**
+     * Called before using the magic method __call()
+     * @param type $name
+     * @param array $args
+     */
+    protected function _preCall(&$name, array &$args) {
+        
+    }
+
+    /**
      * Prepares the related table for select, calling limit and orderBy if required
      * @param \DBScribe\Table $relTable
      * @param array $callArgs
      * @return \DBScribe\Table
      */
     private function prepSelectRelTable(Table &$relTable, array $callArgs) {
-        if ((isset($callArgs[0]) && is_array($callArgs[0]))) {
-            if (isset($callArgs[0]['limit']) && is_array($callArgs[0]['limit'])) {
-                if (isset($callArgs[0]['limit']['count'])) {
-                    if (isset($callArgs[0]['limit']['start'])) {
-                        $relTable->limit($callArgs[0]['limit']['count'], $callArgs[0]['limit']['start']);
-                    }
-                    else {
-                        $relTable->limit($callArgs[0]['limit']['count']);
-                    }
-                }
-            }
-
-            if (isset($callArgs[0]['orderBy'])) {
-                if (is_array($callArgs[0]['orderBy'])) {
-                    foreach ($callArgs[0]['orderBy'] as $orderBy) {
-                        if (is_array($orderBy) && isset($orderBy['column'])) {
-                            if (isset($orderBy['direction'])) {
-                                $relTable->orderBy($orderBy['column'], $orderBy['direction']);
-                            }
-                            else {
-                                $relTable->orderBy($orderBy['column']);
-                            }
-                        }
-                        else if (!is_array($orderBy)) {
-                            $relTable->orderBy($orderBy);
-                        }
-                    }
-                }
-                else {
-                    $relTable->orderBy($callArgs[0]['orderBy']);
-                }
+        foreach ($callArgs[0] as $method => $args) {
+            if ($method === 'where')
+                continue;
+            if (method_exists($relTable, $method)) {
+                $args = is_array($args) ? $args : array($args);
+                $relTable = call_user_func_array(array($relTable, $method), $args);
             }
         }
-
         return $relTable;
     }
 
@@ -300,7 +268,7 @@ class Row implements \JsonSerializable {
      * @return array
      * @throws \Exception
      */
-    private function getRelTableWhere(array $callArgs, $column, $value) {
+    private function getRelTableWhere(array &$callArgs, $column, $value) {
         $where = array();
 
         if (!isset($callArgs[0]) || (isset($callArgs[0]) && !is_array($callArgs[0])) || (isset($callArgs[0]) && is_array($callArgs[0]) && !isset($callArgs[0]['where']))) {
@@ -326,34 +294,18 @@ class Row implements \JsonSerializable {
                 $row->$column = $value;
                 $where[] = $row;
             }
+            unset($callArgs[0]['where']);
         }
 
         return $where;
     }
 
     /**
-     * Replace magic method __call() for children classes
-     * @param type $name
-     * @param array $args
-     */
-    protected function _call(&$name, array &$args) {
-        
-    }
-
-    /**
      * Fetches the connection object
      * @return \DBScribe\Connection|null
      */
-    final protected function getConnection() {
+    final public function getConnection() {
         return $this->_connection;
-    }
-
-    /**
-     * Fetches the relationships of the row
-     * @return array
-     */
-    final protected function getRelationships() {
-        return $this->_relationships;
     }
 
     /**

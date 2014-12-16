@@ -2,6 +2,8 @@
 
 namespace DBScribe;
 
+use Exception;
+
 /**
  * This holds all information concerning a database table and methods to operate
  * on the table and it's columns and rows
@@ -31,7 +33,7 @@ class Table {
 
     /**
      * Connection object
-     * @var \DBScribe\Connection
+     * @var Connection
      */
     protected $connection;
 
@@ -144,6 +146,12 @@ class Table {
     protected $query;
 
     /**
+     * Columns to target the query
+     * @var Array|String 
+     */
+    protected $targetColumns;
+
+    /**
      * The query that serves to join results with referenced tables' rows
      * @var string
      */
@@ -175,13 +183,13 @@ class Table {
 
     /**
      * The class that extends \DBScribe\Row which to map results to
-     * @var \DBScribe\Row
+     * @var Row
      */
     protected $rowModel;
 
     /**
      * Holds the current model the class is working with
-     * @var \DBScribe\Row
+     * @var Row
      */
     protected $rowModelInUse;
 
@@ -222,9 +230,8 @@ class Table {
     protected $customWhere;
 
     /**
-     * Indicates conditions have been attached to the query. This does not take
-     * the customWhere into cognizance
-     * @var boolean 
+     * Conditions to attach to the query
+     * @var string 
      */
     protected $where;
 
@@ -256,14 +263,14 @@ class Table {
      * Indicates the type of results expected
      * @var int One of the RETURN_* constants of this class
      */
-    protected $return;
+    protected $expected;
 
     /**
      * Class contructor
      * @param string $name Name of the table, without the prefix if already 
      * supplied in the connection object
-     * @param \DBScribe\Connection $connection
-     * @param \DBScribe\Row $rowModel
+     * @param Connection $connection
+     * @param Row $rowModel
      */
     public function __construct($name, Connection $connection = null, Row $rowModel = null) {
         $this->name = $connection->getTablePrefix() . strtolower(Util::camelTo_($name));
@@ -271,9 +278,8 @@ class Table {
         $this->rowModel = ($rowModel) ? $rowModel : new Row();
         $this->multiple = false;
         $this->doPost = false;
-        $this->return = Table::RETURN_MODEL;
         $this->delayExecute = false;
-        $this->where = false;
+        $this->where = null;
         $this->groups = array();
         $this->orderBy = array();
         $this->joins = array();
@@ -293,16 +299,39 @@ class Table {
         $this->alterReferences = array();
 
         $this->init();
+        $this->checkDATA();
+    }
+
+    /**
+     * Checks if the DATA constant is declared and declares it if not
+     * @return Table
+     */
+    public function checkDATA() {
+        if (!defined(DATA))
+            define(DATA, __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR);
+
+        if (!is_dir(DATA))
+            mkdir(DATA, 0777, true);
+
+        return $this;
     }
 
     /**
      * Sets the model to use with fetched rows
-     * @param \DBScribe\Row $model
-     * @return \DBScribe\Table
+     * @param Row $model
+     * @return Table
      */
     public function setRowModel(Row $model) {
         $this->rowModel = $model;
         return $this;
+    }
+
+    /**
+     * Fetches the model attached to the table
+     * @return Row $model
+     */
+    public function getRowModel() {
+        return $this->rowModel;
     }
 
     /**
@@ -332,7 +361,7 @@ class Table {
     /**
      * Set the table description
      * @param string $tableDescription
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function setDescription($tableDescription = 'ENGINE=InnoDB') {
         if (!$this->description)
@@ -343,7 +372,7 @@ class Table {
     /**
      * Change the table description
      * @param string $tableDescription
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function changeDescription($tableDescription = 'ENGINE=InnoDB') {
         $this->newDescription = $tableDescription;
@@ -372,7 +401,7 @@ class Table {
     /**
      * Sets the primary key
      * @param string $pk
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function setPrimaryKey($pk) {
         if ($this->primaryKey === $pk)
@@ -396,7 +425,7 @@ class Table {
 
     /**
      * Removes the primary key
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function dropPrimaryKey() {
         $this->dropPrimaryKey = true;
@@ -442,7 +471,7 @@ class Table {
      * @param string $columnName
      * @param string $type Should be one of \DBScribe\Table::INDEX_REGULAR,  \DBScribe\Table::INDEX_UNIQUE,
      * or  \DBScribe\Table::INDEX_FULLTEXT
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function addIndex($columnName, $type = Table::INDEX_REGULAR) {
         if (!array_key_exists($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newIndexes))
@@ -464,7 +493,7 @@ class Table {
     /**
      * Removes index from a column
      * @param string $columnName
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function dropIndex($columnName) {
         if (!in_array($columnName, $this->dropIndexes))
@@ -491,7 +520,7 @@ class Table {
      * Add a column to the table
      * @param string $columnName
      * @param string $columnDescription
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function addColumn($columnName, $columnDescription) {
         $this->newColumns[$columnName] = $columnDescription;
@@ -509,7 +538,7 @@ class Table {
     /**
      * Removes a column
      * @param string $columnName
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function dropColumn($columnName) {
         $this->dropColumns[] = $columnName;
@@ -547,7 +576,7 @@ class Table {
      * Alter column description
      * @param string $columnName
      * @param string $columnDescription
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function alterColumn($columnName, $columnDescription) {
         $this->alterColumns[$columnName] = $columnDescription;
@@ -584,7 +613,7 @@ class Table {
     /**
      * Removes a reference from a column
      * @param string $columnName
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function dropReference($columnName) {
         $this->dropReferences[] = $columnName;
@@ -607,7 +636,7 @@ class Table {
      * @param string $columnName
      * @param string $refTable
      * @param string $refColumn
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function addReference($columnName, $refTable, $refColumn, $onDelete = 'RESTRICT', $onUpdate = 'RESTRICT') {
         $this->addIndex($columnName);
@@ -636,7 +665,7 @@ class Table {
      * @param string $columnName
      * @param string $refTable
      * @param string $refColumn
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function alterReference($columnName, $refTable, $refColumn, $onDelete = 'RESTRICT', $onUpdate = 'RESTRICT') {
         $this->dropReference($columnName);
@@ -646,8 +675,8 @@ class Table {
 
     /**
      * Sets the model to map the table to
-     * @param \DBScribe\Row $model
-     * @return \DBScribe\Table
+     * @param Row $model
+     * @return Table
      */
     public function setModel(Row $model) {
         $this->rowModel = $model;
@@ -656,7 +685,7 @@ class Table {
 
     /**
      * Fetches the model set for the table
-     * @return DBScribe\Row
+     * @return Row
      */
     public function getModel() {
         return $this->rowModel;
@@ -772,13 +801,13 @@ class Table {
     }
 
     /**
-     * Checks if a connection exists
+     * Checks if a connection and table exist
      * @return boolean
-     * @throws \Exception
+     * @throws Exception
      */
-    private function checkReady() {
+    private function checkExists() {
         if (!$this->connection)
-            throw new \Exception('Invalid action. No connection found');
+            throw new Exception('Invalid action. No connection found');
 
         return $this->exists();
     }
@@ -787,10 +816,10 @@ class Table {
      * Inserts the given row(s) into the table<br />
      * Many rows can be inserted at once.
      * @param array $values Array with values \DBScribe\Row or array of [column => value]
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function insert(array $values) {
-        if (!$this->checkReady())
+        if (!$this->checkExists())
             return false;
 
         $this->current = self::OP_INSERT;
@@ -803,12 +832,12 @@ class Table {
                 $noOfColumns = count($rowArray);
 
             if (count($rowArray) !== $noOfColumns) {
-                throw new \Exception('All rows must have the same number of columns in table "' . $this->name .
+                throw new Exception('All rows must have the same number of columns in table "' . $this->name .
                 '". Set others as null');
             }
 
             if (count($rowArray) === 0)
-                throw new \Exception('You cannot insert an empty row into table "' . $this->name . '"');
+                throw new Exception('You cannot insert an empty row into table "' . $this->name . '"');
 
             foreach ($rowArray as $column => &$value) {
                 if (empty($value) && $value != 0)
@@ -835,35 +864,58 @@ class Table {
     }
 
     /**
-     * Sets the relationships into each row for future references
-     * @todo Remove relationships from rows and use the one in the table instead
+     * Fetches the relationships between the columns in this table and the 
+     * give table
+     * @param string $table
+     * @return array
      */
-    private function setRowRelationships() {
-        if ($this->rowModel === NULL)
-            $this->rowModel = new Row();
-
+    public function getTableRelationships($table) {
+        $table = $this->connection->getTablePrefix() . Util::camelTo_($table);
         $relationships = array();
         foreach ($this->references as $columnName => $info) {
-            if ($info['constraintName'] == 'PRIMARY' || empty($info['refTable']))
+            if ($info['constraintName'] == 'PRIMARY' || $info['refTable'] != $table)
                 continue;
-            $relationships[$info['refTable']][] = array(
-                'column' => $columnName,
-                'refColumn' => $info['refColumn'],
-                'push' => false
-            );
+            $this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, false);
         }
         foreach ($this->backReferences as $columnName => $infoArray) {
             foreach ($infoArray as $info) {
-                if (empty($info['refTable']))
+                if ($info['refTable'] != $table)
                     continue;
-                $relationships[$info['refTable']][] = array(
-                    'column' => $columnName,
-                    'refColumn' => $info['refColumn'],
-                    'push' => true,
-                );
+                $this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, true);
             }
         }
-        $this->rowModel->setRelationships($relationships);
+        return $relationships[$table];
+    }
+
+    /**
+     * Fetches the relationships between the specified column and other columns 
+     * (in other tables)
+     * @param string $columnName
+     * @return array
+     */
+    public function getColumnRelationships($columnName) {
+        $columnName = Util::camelTo_($columnName);
+        $relationships = array();
+        if ($info = $this->references[$columnName]) {
+            if ($info['constraintName'] != 'PRIMARY' && !empty($info['refTable'])) {
+                $this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, false);
+            }
+        }
+        if ($info = $this->backReferences[$columnName]) {
+            if (!empty($info['refTable'])) {
+                $this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, true);
+            }
+        }
+
+        return $relationships;
+    }
+
+    private function setupRelationship($columnName, $refColumn, $refTable, array &$relationships, $push = true) {
+        return $relationships[$refTable][] = array(
+            'column' => $columnName,
+            'refColumn' => $refColumn,
+            'push' => $push
+        );
     }
 
     private function prepareColumns(Table $table = null, $alias = null) {
@@ -873,14 +925,15 @@ class Table {
             $ignoreJoins = true;
         }
         $return = '';
-        if ($table->getModel() !== null && count($table->getModel()->toArray())) {
-            $columns = array_keys($this->rowModel->toArray(true));
+        if (!$table->hasTargetColumns() && $table->getModel() !== null && count($table->getModel()->toArray())) {
+            $table->targetColumns(array_keys($table->getRowModel()->toArray(true)));
         }
-        else {
-            $columns = $table->getColumns(true);
+        else if (!$table->hasTargetColumns()) {
+            $table->targetColumns($table->getColumns(true));
         }
 
-        foreach ($columns as $column) {
+        foreach ($table->targetColumns as &$column) {
+            $column = Util::camelTo_(trim($column));
             if ($return)
                 $return .= ', ';
 
@@ -896,69 +949,173 @@ class Table {
     }
 
     /**
+     * This targets the query at the given columns
+     * @param array|string $columns Array or comma-separated string of columns
+     * @return Table
+     */
+    public function targetColumns($columns) {
+        $this->targetColumns = is_array($columns) ? $columns : explode(',', $columns);
+        return $this;
+    }
+
+    public function hasTargetColumns() {
+        return !is_null($this->targetColumns);
+    }
+
+    /**
+     * Selects the given columns from rows with the given criteria
+     * Many rows can be passed in as criteria
+     * @param array|string $columns Array or comma-separated string of columns
+     * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
+     * @param int $return Indicates the type of result expected
+     * @return Table|ArrayCollection
+     */
+    public function selectColumns($columns, array $criteria = array(), $return = Table::RETURN_MODEL) {
+        $this->targetColumns($columns);
+        return $this->select($criteria, $return);
+    }
+
+    /**
      * Selects rows from database
      * Many rows can be passed in as criteria
      * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
      * @param int $return Indicates the type of result expected
-     * @return \DBScribe\Table|ArrayCollection
+     * @return Table|ArrayCollection
      */
     public function select(array $criteria = array(), $return = Table::RETURN_MODEL) {
-        if (!$this->checkReady()) {
+        if (!$this->checkExists()) {
             return ($this->delayExecute) ? $this : new ArrayCollection();
         }
 
-        $this->setRowRelationships();
         $this->current = self::OP_SELECT;
 
         $this->query = 'SELECT ' . $this->prepareColumns();
         $this->query .= ' FROM `' . $this->name . '`' . $this->processJoins();
-        $this->queryWhere($criteria);
 
-        if ($this->groups) {
-            $this->query .= ' GROUP BY ';
-            foreach ($this->groups as $ky => $column) {
-                if ($ky)
-                    $this->query .= ', ';
-                $this->query .= '`' . $this->name . '`.`' . $column . '`';
-            }
-        }
+        $this->where($criteria);
 
-        if ($this->having) {
-            $this->query .= ' HAVING ' . $this->having;
-        }
-        $this->return = $return;
+        $this->setExpectedResult($return, true);
         if ($this->delayExecute) {
             return $this;
         }
         return $this->execute();
     }
 
-    private function queryWhere(array $criteria) {
-        if (!empty($criteria))
-            $this->where = true;
+    /**
+     * Fetches the results from cache if available
+     * @return array|nul
+     */
+    private function fromCache() {
+        if (isset($_GET['noCache']))
+            return null;
+        $cacheDir = DATA . 'select' . DIRECTORY_SEPARATOR;
+        if (!is_dir($cacheDir))
+            mkdir($cacheDir, 0777, true);
 
-        foreach ($criteria as $ky => $row) {
-            if ($ky == 0)
-                $this->query .= ' WHERE (';
-            else
-                $this->query .= ' OR (';
+        $cache = $cacheDir . base64_encode($this->getName()) . '.php';
+        if (!is_readable($cache))
+            return null;
 
-            $rowArray = $this->checkModel($row);
-            $cnt = 1;
-            foreach ($rowArray as $column => $value) {
-                if (!is_array($value)) {
-                    $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` = ?';
-                    if (count($rowArray) > $cnt)
-                        $this->query .= ' AND ';
-                    $this->values[] = $value;
-                }
-                else {
-                    $this->query .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` IN (\'' . join('\', \'', $value) . '\')';
-                }
-                $cnt++;
+        $cached = include $cache;
+        return $this->decode($cached[$this->encode($this->query . serialize($this->values))]);
+    }
+
+    /**
+     * Saves the given result, if valid, to cache for future uses
+     * @param array $result
+     * @return boolean
+     */
+    private function toCache($result) {
+        if (!$result)
+            return false;
+        $cache = DATA . 'select' . DIRECTORY_SEPARATOR . $this->encode($this->getName()) . '.php';
+        return Util::updateConfig($cache, array($this->encode($this->query . serialize($this->values)) => $this->encode(serialize($result))));
+    }
+
+    /**
+     * Removes cached result because the table has been updated
+     * @return bool
+     */
+    private function removeCache() {
+        return unlink(DATA . 'select' . DIRECTORY_SEPARATOR . $this->encode($this->getName()) . '.php');
+    }
+
+    /**
+     * Encodes the given data
+     * @param string $data
+     * @return string
+     */
+    private function encode($data) {
+        return base64_encode($data);
+    }
+
+    /**
+     * Decodes the given data and unserializes it
+     * @param string $data
+     * @return array|bool False if not unserializable. Array otherwise
+     */
+    private function decode($data) {
+        return unserialize(base64_decode($data));
+    }
+
+    /**
+     * Sets the type of result expected
+     * @param int $expected One of \DBScribe\Table::RETURN_DEFAULT, 
+     * \DBScribe\Table::RETURN_MODEL or \DBScribe\Table::RETURN_JSON
+     * @param bool $checkNotSet Only set if not already
+     * @return Table
+     */
+    public function setExpectedResult($expected = Table::RETURN_MODEL, $checkNotSet = false) {
+        if (!$checkNotSet || ($checkNotSet && is_null($this->expected)))
+            $this->expected = $expected;
+        return $this;
+    }
+
+    /**
+     * Create the where part of the query
+     * @param array $criteria Array of row column array
+     * @param bool $joinWithAnd Indicates whether to join the query with the 
+     * previous one with the logical AND
+     * @param bool $notEqual Indicates whether not to equate the giveM value to actual
+     * column value
+     * @return Table
+     */
+    public function where(array $criteria, $joinWithAnd = true, $notEqual = false) {
+        if (count($criteria)) {
+            if (!$this->where)
+                $this->where = ' WHERE (';
+            else if ($this->where && substr($this->where, strlen($this->where) - 1) === ')')
+                $this->where = substr($this->where, 0, strlen($this->where) - 1);
+
+            if ($this->where !== ' WHERE (') {
+                $this->where .= $joinWithAnd ? ' AND ' : ' OR ';
             }
-            $this->query .= ')';
+            foreach ($criteria as $ky => $row) {
+                if ($ky)
+                    $this->where .= ' OR (';
+
+                $rowArray = $this->checkModel($row);
+                $cnt = 1;
+                foreach ($rowArray as $column => $value) {
+                    if (!is_array($value)) {
+                        $this->where .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` ';
+                        $this->where .= ($notEqual) ? '!=' : '=';
+                        $this->where .= ' ?';
+                        if (count($rowArray) > $cnt)
+                            $this->where .= ' AND ';
+                        $this->values[] = $value;
+                    }
+                    else {
+                        $this->where .= '`' . $this->name . '`.`' . Util::camelTo_($column) . '` ';
+                        $this->where .= ($notEqual) ? 'NOT IN' : 'IN';
+                        $this->where .= ' (\'' . join('\', \'', $value) . '\')';
+                    }
+                    $cnt++;
+                }
+                $this->where .= ')';
+            }
         }
+        return $this;
     }
 
     private function returnSelect($return) {
@@ -969,7 +1126,7 @@ class Table {
 
         foreach ($return as &$ret) {
             $imm = array();
-            foreach ($this->getColumns(true) as $col) {
+            foreach ($this->targetColumns as $col) {
                 $imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
                 unset($ret[Util::_toCamel($col)]);
             }
@@ -984,8 +1141,7 @@ class Table {
                 $this->relationshipData[] = $ret;
             }
         }
-
-        switch ($this->return) {
+        switch ($this->expected) {
             case self::RETURN_JSON:
                 $return = json_encode($forThis);
                 break;
@@ -996,7 +1152,6 @@ class Table {
                 $return = $forThis;
                 break;
         }
-
         return $return;
     }
 
@@ -1025,10 +1180,154 @@ class Table {
      * @param string $column
      * @param mixed $value
      * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function like($column, $value, $logicalAnd = true) {
         $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where it is NOT LIKE the value, i.e. it does not contain
+     *  the given value 
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function notLike($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where it is less than the given value
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function lessThan($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` < "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where it is less than or equal to the given value
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function lessThanOrEqualTo($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` =< "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where it is greater than the given value
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function greaterThan($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` > "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where it is greater than or equal to the given value
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function greaterThanOrEqualTo($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` >= "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Query the table where the given values are not equal to the corresponding
+     * column value in the table
+     * @param array $criteria
+     * @return Table
+     */
+    public function notEqual(array $criteria) {
+        $this->where($criteria, true, true);
+        return $this;
+    }
+
+    /**
+     * Select a column where the value matches the regular expression
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function regExp($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` REGEXP "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the value does not match the regular expression
+     * @param string $column
+     * @param mixed $value
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function notRegExp($column, $value, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT REGEXP "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the value is null
+     * @param string $column
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function isNull($column, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IS NULL', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the value is not null
+     * @param string $column
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function isNotNull($column, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IS NOT NULL', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Select a column where the values of the given columns are null
+     * @param string $columns
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function areNull(array $columns, $logicalAnd = true) {
+        foreach ($columns as $column) {
+            $this->isNull($column, $logicalAnd);
+        }
+        return $this;
+    }
+
+    /**
+     * Select a column where the values of the given columns are not null
+     * @param string $columns
+     * @param boolean $logicalAnd Indicates whether to use logical AND (TRUE) or OR (FALSE)
+     * @return Table
+     */
+    public function areNotNull(array $columns, $logicalAnd = true) {
+        foreach ($columns as $column) {
+            $this->isNotNull($column, $logicalAnd);
+        }
         return $this;
     }
 
@@ -1041,7 +1340,7 @@ class Table {
      * @param string $tablePlaceholder A string within the custom where to be 
      * replaced with the table name. Useful when a table prefix might have been 
      * used
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function customWhere($custom, $logicalConnector = 'AND', $tablePlaceholder = ':TBL:') {
         if (!$this->customWhere) {
@@ -1057,7 +1356,7 @@ class Table {
     /**
      * Group result by data in given column
      * @param string $columnName
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function groupBy($columnName) {
         $this->groups[] = $columnName;
@@ -1067,7 +1366,7 @@ class Table {
     /**
      * Fetch rows that fulfill the given condition
      * @param string $condition Ready-made query e.g `:TBL:`.`id` > 2
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function having($condition, $tablePlaceholder = ':TBL:') {
         $this->having = trim(str_replace($tablePlaceholder, $this->name, $condition));
@@ -1075,16 +1374,30 @@ class Table {
     }
 
     /**
-     * Fetch results that whose data in the given column is in the given array
+     * Fetch results whose data in the given column is in the given array
      * of values
      * @param string $column
      * @param array $values
      * @param boolean $logicalAnd Indicates whether to join the in query to the
      * rest of the query with an AND (TRUE) or an OR (FALSE)
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function in($column, array $values, $logicalAnd = true) {
         $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IN ("' . join('","', $values) . '")', $logicalAnd ? 'AND' : 'OR');
+        return $this;
+    }
+
+    /**
+     * Fetch results whose data in the given column are in the given array
+     * of values
+     * @param string $column
+     * @param array $values
+     * @param boolean $logicalAnd Indicates whether to join the in query to the
+     * rest of the query with an AND (TRUE) or an OR (FALSE)
+     * @return Table
+     */
+    public function notIn($column, array $values, $logicalAnd = true) {
+        $this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT IN ("' . join('","', $values) . '")', $logicalAnd ? 'AND' : 'OR');
         return $this;
     }
 
@@ -1102,20 +1415,27 @@ class Table {
         $this->joinQuery = '';
         $superStart = false;
         foreach ($this->joins as $table => $options) {
-            if (!$relationship = $this->rowModel->getRelationship($table))
+            $relationships = $this->getTableRelationships($table);
+            if (!count($relationships))
                 continue;
 
             if (!is_object($table)) {
                 $table = new Table($table, $this->connection);
             }
-            $this->query .= ', ' . $this->prepareColumns($table, ($table->getName() == $this->name) ? 't' : null);
+
+            $alias = substr($table->getName(), 0, 1) .
+                    substr($table->getName(), count($table->getName()) - 1, 1);
+            $this->query .= ', ' .
+                    $this->prepareColumns($table, ($table->getName() == $this->name) ?
+                                    $alias : null);
 
             $this->joinQuery .= ' LEFT OUTER JOIN `' . $table->getName() . '`' .
-                    (($table->getName() == $this->name) ? ' t' : null);
+                    (($table->getName() == $this->name) ? ' ' . $alias : null);
 
             $started = false;
-            foreach ($relationship as $ky => $rel) {
-                if (($rel['push'] && isset($options['pull']) && @$options['push']) || (!$rel['push'] && isset($options['pull']) && !$options['pull']))
+            foreach ($relationships as $ky => $rel) {
+                if (($rel['push'] && isset($options['pull']) && @$options['push']) ||
+                        (!$rel['push'] && isset($options['pull']) && !$options['pull']))
                     continue;
 
                 if ($ky && $started)
@@ -1124,7 +1444,10 @@ class Table {
                     $this->joinQuery .= ' ON ';
                 $started = true;
                 $superStart = true;
-                $this->joinQuery .= '`' . $this->name . '`.`' . $rel['column'] . '` = ' . (($table->getName() == $this->name) ? 't' : '`' . $table->getName() . '`') . '.`' . $rel['refColumn'] . '` ';
+                $this->joinQuery .= '`' . $this->name . '`.`' . $rel['column'] .
+                        '` = ' . (($table->getName() == $this->name) ?
+                                $alias : '`' . $table->getName() . '`') . '.`' .
+                        $rel['refColumn'] . '` ';
 
                 if (isset($options['where'])) {
                     foreach ($options['where'] as $column => $value) {
@@ -1136,7 +1459,7 @@ class Table {
         }
 
         if ($this->joinQuery && !$superStart)
-            throw new \Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
+            throw new Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
 
         $this->joins = array();
 
@@ -1147,9 +1470,9 @@ class Table {
      * Checks the joined data for rows that have the value needed in a column
      * @param string $tableName
      * @param array $columns Key to value of column to value
-     * @param \DBScribe\Row $object
+     * @param Row $object
      * @param array $options
-     * @return \DBScribe\ArrayCollection
+     * @return ArrayCollection
      */
     final public function seekJoin($tableName, array $columns, Row $object = null, array $options = array()) {
         if (!$this->joinQuery)
@@ -1246,12 +1569,12 @@ class Table {
      * Checks if the row is a valid \DBScribe\Row row
      * @param array|object $row
      * @param boolean $preSave Indicates whether to call the presave function of the row
-     * @throws \Exception
+     * @throws Exception
      * @return array|boolean
      */
     private function checkModel($row, $preSave = false) {
         if (!is_array($row) && !is_object($row))
-            throw new \Exception('Each element of param $where must be an object of, or one that extends, "DBScribe\Row", or an array of [column => value]');
+            throw new Exception('Each element of param $where must be an object of, or one that extends, "DBScribe\Row", or an array of [column => value]: ' . print_r($row, true));
 
         if (empty($this->columns))
             return array();
@@ -1269,15 +1592,37 @@ class Table {
     }
 
     /**
+     * Orders the returned rows
+     * @param string $column
+     * @param string $direction One of \DBScribe\Table::ORDER_ASC or \DBScribe\Table::ORDER_DESC
+     * @return Table
+     */
+    public function orderBy($column, $direction = Table::ORDER_ASC) {
+        $this->orderBy[] = '`' . Util::camelTo_($column) . '` ' . $direction;
+        return $this;
+    }
+
+    /**
+     * Limits the number of rows to return
+     * @param int $count No of rows to return
+     * @param int $start Row no to start from
+     * @return Table
+     */
+    public function limit($count, $start = 0) {
+        $this->limit = 'LIMIT ' . $start . ', ' . $count;
+        return $this;
+    }
+
+    /**
      * Counts the number of rows in the table based on a column
      * @param string $column The column to count
      * @return Int
      */
     public function count($column = '*', $criteria = array(), $return = Table::RETURN_MODEL) {
         $this->query = 'SELECT COUNT(' . Util::camelTo_($column) . ') as rows FROM `' . $this->name . '`';
-        $this->queryWhere($criteria);
+        $this->where($criteria);
 
-        $this->return = $return;
+        $this->setExpectedResult($return, true);
         if ($ret = $this->execute()) {
             return ($ret) ? $ret[0]['rows'] : 0;
         }
@@ -1292,22 +1637,11 @@ class Table {
      */
     public function distinct($column, array $criteria = array(), $return = Table::RETURN_MODEL) {
         $this->current = self::OP_SELECT;
-        $this->return = $return;
+        $this->setExpectedResult($return, true);
+        $this->targetColumns($column);
         $this->query = 'SELECT DISTINCT `' . $this->name . '`.`' . Util::camelTo_($column) . '` as ' . Util::_toCamel($column) . ' FROM `' . $this->name . '` ' . $this->joinQuery;
-        $this->queryWhere($criteria);
+        $this->where($criteria);
 
-        if ($this->groups) {
-            $this->query .= ' GROUP BY ';
-            foreach ($this->groups as $ky => $column) {
-                if ($ky)
-                    $this->query .= ', ';
-                $this->query .= '`' . $this->name . '`.`' . $column . '`';
-            }
-        }
-
-        if ($this->having) {
-            $this->query .= ' HAVING ' . $this->having;
-        }
         return $this->execute();
     }
 
@@ -1317,10 +1651,10 @@ class Table {
      * @param array $values Array with values \DBScribe\Row or array of [column => value]
      * @param string $whereColumn Column name to check. Default is the id column
      * @todo Allow multiple columns as criteria where
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function update(array $values, $whereColumn = 'id') {
-        if (!$this->checkReady())
+        if (!$this->checkExists())
             return false;
         $this->current = self::OP_UPDATE;
         $this->query = 'UPDATE `' . $this->name . '` SET ';
@@ -1339,19 +1673,20 @@ class Table {
             if ($ky == 0)
                 $nColumns = array_keys($rowArray);
             if (count($rowArray) !== count($nColumns))
-                throw new \Exception('All rows must have the same number of columns in table "' . $this->name .
+                throw new Exception('All rows must have the same number of columns in table "' . $this->name .
                 '". Set others as null');
 
             if (count($rowArray) === 0)
-                throw new \Exception('You cannot insert an empty row into table "' . $this->name . '"');
+                throw new Exception('You cannot insert an empty row into table "' . $this->name . '"');
 
             $cnt = 1;
             foreach ($rowArray as $column => &$value) {
+                $column = Util::camelTo_($column);
                 if (empty($value) && $value != 0)
                     continue;
 
                 if ($cnt > 1 && !in_array($column, $nColumns)) {
-                    throw new \Exception('All rows must have the same column names.');
+                    throw new Exception('All rows must have the same column names.');
                 }
 
                 if ($this->getPrimaryKey() == $column) {
@@ -1375,8 +1710,8 @@ class Table {
 
                 $cnt++;
             }
-
             foreach ($whereColumn as $column) {
+                $column = Util::camelTo_($column);
                 $this->value[$ky][':' . $column] = $rowArray[$column];
             }
         }
@@ -1392,7 +1727,6 @@ class Table {
                 $this->query .= ' AND ';
             $this->query .= '`' . $where . '`=:' . $where;
         }
-
         $this->multiple = true;
         $this->doPost = self::OP_UPDATE;
         if ($this->delayExecute) {
@@ -1406,6 +1740,7 @@ class Table {
      * @param array $values
      * @param string|integer|array $whereColumn
      * @return boolean
+     * @todo Refactor to accomodate large bulk of data
      */
     public function upsert(array $values, $whereColumn = 'id') {
         $select = $existing = array();
@@ -1431,32 +1766,35 @@ class Table {
             }
         }
         $update = $insert = array();
-        foreach ($values as $ky => $vals) {
+        foreach ($values as $ky => $valus) {
             $up = true;
             foreach ($whereColumn as $where) {
-                if (!in_array($vals[$where], $existing)) {
+                if (!in_array($valus[$where], $existing)) {
                     $up = false;
                     break;
                 }
             }
             if ($up) {
-                $update[] = $vals;
+                $update[] = $valus;
             }
             else {
-                if (!isset($vals[$this->getPrimaryKey()])) {
-                    //@todo check type of primary key to determine what to assign
-                    // to it
-                    $vals[$this->getPrimaryKey()] = Util::createGUID();
+                if (!isset($valus[$this->getPrimaryKey()]) &&
+                        $this->columns[$this->getPrimaryKey()]['extra'] !== 'AUTO_INCREMENT') {
+                    $valus[$this->getPrimaryKey()] = Util::createGUID();
                 }
-                $insert[] = $vals;
+                $insert[] = $valus;
             }
         }
 
         if (!empty($update)) {
             $return = $this->update($update, $whereColumn);
+            if ($this->delayExecute)
+                $return = $this->execute();
         }
         if ((($update && $return) || !$update) && !empty($insert)) {
             $return = $this->insert(array_values($insert));
+            if ($this->delayExecute)
+                $return = $this->execute();
         }
         return $return;
     }
@@ -1465,10 +1803,10 @@ class Table {
      * Deletes the given row(s) in the table<br />
      * Many rows can be deleted at once.
      * @param array $criteria Array with values \DBScribe\Row or values of [column => value]
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function delete(array $criteria = array()) {
-        if (!$this->checkReady())
+        if (!$this->checkExists())
             return false;
 
         $this->current = self::OP_DELETE;
@@ -1482,6 +1820,7 @@ class Table {
                 if (!is_object($value) && $value === null) {
                     continue;
                 }
+                $column = Util::camelTo_($column);
 
                 if ($cnt)
                     $this->query .= ' AND ';
@@ -1502,31 +1841,9 @@ class Table {
     }
 
     /**
-     * Orders the returned rows
-     * @param string $column
-     * @param string $direction One of \DBScribe\Table::ORDER_ASC or \DBScribe\Table::ORDER_DESC
-     * @return \DBScribe\Table
-     */
-    public function orderBy($column, $direction = Table::ORDER_ASC) {
-        $this->orderBy[] = '`' . Util::camelTo_($column) . '` ' . $direction;
-        return $this;
-    }
-
-    /**
-     * Limits the number of rows to return
-     * @param int $count No of rows to return
-     * @param int $start Row no to start from
-     * @return \DBScribe\Table
-     */
-    public function limit($count, $start = 0) {
-        $this->limit = 'LIMIT ' . $start . ', ' . $count;
-        return $this;
-    }
-
-    /**
      * Indicates whether to delay database operation until method execute() is called
      * @param boolean $delay
-     * @return \DBScribe\Table
+     * @return Table
      */
     public function delayExecute($delay = true) {
         $this->delayExecute = $delay;
@@ -1538,14 +1855,14 @@ class Table {
      * @return mixed
      */
     public function execute() {
-        if (!$this->checkReady()) {
+        if (!$this->checkExists()) {
             if ($this->current === self::OP_SELECT) {
                 return new ArrayCollection();
             }
 
             return false;
         }
-
+        $this->query .= $this->where;
         if (!empty($this->customWhere)) {
             if ($this->where) {
                 $this->query .= ' ' . $this->customWhereJoin . ' ' . $this->customWhere;
@@ -1554,7 +1871,19 @@ class Table {
                 $this->query .= ' WHERE ' . $this->customWhere;
             }
         }
-
+        if ($this->current === self::OP_SELECT) {
+            if ($this->groups) {
+                $this->query .= ' GROUP BY ';
+                foreach ($this->groups as $ky => $column) {
+                    if ($ky)
+                        $this->query .= ', ';
+                    $this->query .= '`' . $this->name . '`.`' . $column . '`';
+                }
+            }
+            if ($this->having) {
+                $this->query .= ' HAVING ' . $this->having;
+            }
+        }
         if (!empty($this->orderBy)) {
             $this->query .= ' ORDER BY ';
             foreach ($this->orderBy as $ky => $order) {
@@ -1570,17 +1899,22 @@ class Table {
             $this->query .= ' FROM `' . $this->name . '`';
         }
 
-        $model = ($this->return) ? $this->rowModel : null;
+        $model = ($this->expected) ? $this->getRowModel() : null;
+        if (($this->current === self::OP_SELECT && !$result = $this->fromCache()) || $this->current !== self::OP_SELECT) {
+            $result = $this->connection->doPrepare($this->query, $this->values, array(
+                'multipleRows' => $this->multiple,
+                'model' => $model
+            ));
 
-        $result = $this->connection->doPrepare($this->query, $this->values, array(
-            'multipleRows' => $this->multiple,
-            'model' => $model
-        ));
+            if ($this->current === self::OP_SELECT)
+                $this->toCache($result);
+            else
+                $this->removeCache();
+        }
 
         if ($this->current === self::OP_SELECT) {
             $result = $this->returnSelect($result);
         }
-
         $this->resetQuery();
         return $result;
     }
@@ -1588,15 +1922,16 @@ class Table {
     private function resetQuery() {
         $this->query = null;
         $this->values = null;
+        $this->targetColumns = null;
         $this->orderBy = array();
         $this->limit = null;
         $this->customWhere = null;
-        $this->where = false;
+        $this->where = null;
         $this->having = null;
         $this->groups = array();
         $this->current = null;
         $this->multiple = false;
-        $this->return = self::RETURN_MODEL;
+        $this->expected = null;
     }
 
     /**

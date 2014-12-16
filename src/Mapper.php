@@ -29,9 +29,6 @@ abstract class Mapper extends Row {
      * @param Table $table Live table connection
      */
     public function init(Table &$table) {
-        if (!defined('DATA'))
-            define('DATA', __DIR__);
-
         $this->_table = & $table;
         $className = str_replace('\\', '.', get_called_class());
         $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . $className;
@@ -217,7 +214,7 @@ abstract class Mapper extends Row {
                 $table->setPrimaryKey($dbColumnName);
             }
 
-            if (isset($descArray['attrs']['reference']) && $descArray['type'] !== 'ReferenceMany') {
+            if (isset($descArray['attrs']['reference'])) { // Reference not ReferenceMany
                 $onDelete = (isset($descArray['attrs']['reference']['onDelete'])) ?
                         $descArray['attrs']['reference']['onDelete'] : 'RESTRICT';
                 $onUpdate = (isset($descArray['attrs']['reference']['onUpdate'])) ?
@@ -300,8 +297,7 @@ abstract class Mapper extends Row {
             else if (isset($attrs['attrs']['first']) && $attrs['attrs']['first'])
                 $return .= ' FIRST';
         }
-
-        if (isset($attrs['attrs']['onUpdate'])) // auto increment
+        if (isset($attrs['attrs']['onUpdate']) && $attrs['type'] !== 'ReferenceMany') // auto increment
             $return .= ' ON UPDATE ' . $attrs['attrs']['onUpdate'];
 
         return $return;
@@ -340,6 +336,7 @@ abstract class Mapper extends Row {
      */
     private function isUpToDate($path, Table &$table) {
         $classPath = $this->getClassPath(get_called_class());
+        $return = null;
         // update if any parent is changed
         foreach (class_parents(get_called_class()) as $parent) {
             if ($parent === get_class())
@@ -661,30 +658,27 @@ abstract class Mapper extends Row {
      * @param string $name
      * @param array $arguments
      */
-    protected function _call(&$name, array &$args) {
+    protected function _preCall(&$name, array &$args) {
         if (!method_exists($this, $name)) {
-            $modelTable = self::getModelTable(Util::camelTo_($name));
-            if (!empty($modelTable)) {
-                if (!$this->getConnection())
-                    $this->setConnection($this->_table->getConnection());
-
-                $relTable = $this->getConnection()->table(Util::camelTo_($name));
+            if ($modelTable = self::getModelTable(Util::camelTo_($name))) {
+                $relTable = $this->getConnection()->table($name);
                 $model = is_array($modelTable) ?
                         new $modelTable[count($modelTable) - 1] :
                         new $modelTable;
                 $model->setConnection($this->getConnection());
-
                 $model->init($relTable);
                 $args['model'] = $model;
             }
-            $settings = $this->getSettings();
-            if (@$settings[$name]['type'] === 'ReferenceMany') {
-                $args['relateWhere'] = array();
-                $nam = (!is_array($this->$name)) ? explode('__:DS:__', $this->$name) : $this->$name;
-                foreach ($nam as $val) {
-                    $args['relateWhere'][] = array(
-                        $this->settings[$name]['attrs']['column'] => $val,
-                    );
+            
+            foreach($this->getSettings() as $column => $rel) {
+                if ($rel['type'] === 'ReferenceMany') {
+                    $args['relateWhere'] = array();
+                    $nam = (!is_array($this->$column)) ? explode('__:DS:__', $this->$column) : $this->$column;
+                    foreach ($nam as $val) {
+                        $args['relateWhere'][] = array(
+                            $this->settings[$column]['attrs']['column'] => $val,
+                        );
+                    }
                 }
             }
         }
@@ -713,7 +707,7 @@ abstract class Mapper extends Row {
                 }
 
                 $prev = Util::camelTo_($property);
-                if ((strtolower($desc['type']) === 'reference' || strtolower($desc['type']) === 'referencemany')) {
+                if (strtolower($desc['type']) === 'reference' || strtolower($desc['type']) === 'referencemany') {
                     $defer[$property] = $desc;
                 }
 
@@ -965,6 +959,7 @@ abstract class Mapper extends Row {
      * Turns empty values to null
      */
     public function preSave() {
+        $this->getSettings();
         foreach ($this->toArray() as $ppt => $val) {
             $settingKey = \Util::_toCamel($ppt);
             if (@$this->settings[$settingKey]['type'] === 'ReferenceMany' && !empty($val)) {
@@ -1012,7 +1007,8 @@ abstract class Mapper extends Row {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d H:i:s');
                 $val = $this->$settingKey;
             }
-            elseif (empty($val) && $val != 0) {
+
+            if (empty($val) && $val != 0) {
                 if (!property_exists($this, $ppt))
                     $ppt = Util::_toCamel($ppt);
                 $this->$ppt = null;
@@ -1100,21 +1096,6 @@ abstract class Mapper extends Row {
         return $this->_table;
     }
 
-    final public function getRelationship($tableName) {
-        $return = parent::getRelationship($tableName);
-        if (!$return && $settings = $this->getSettings(Util::_toCamel($tableName))) {
-            if ($settings['type'] == 'ReferenceMany') {
-                $return = array(
-                    array(
-                        'column' => $tableName,
-                        'refColumn' => $settings['attrs']['column'],
-                    )
-                );
-            }
-        }
-        return $return;
-    }
-
     /**
      * Fetches an array of properties and their values
      * @param boolean $withNull Indicates whether to return properties with null values too
@@ -1124,7 +1105,7 @@ abstract class Mapper extends Row {
      */
     public function toArray($withNull = false, $asIs = false) {
         $array = parent::toArray();
-        unset($array['tableName']);
+        unset($array['_table']);
 
         if ($asIs) {
             return $array;
