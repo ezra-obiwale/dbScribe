@@ -187,12 +187,14 @@ class Row implements \JsonSerializable {
             }
 
             $this->_by = null;
-            if (empty($where))
-                return new ArrayCollection;
 
-            // check joined tables' results
-            $compressed = Util::compressArray($where);
-            $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args), $args);
+            // @todo: allow checking of all methods and not where alone for
+            // joined rows
+            if (count($where)) {
+                // check joined tables' results
+                $compressed = Util::compressArray($where);
+                $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args), $args);
+            }
 
             // select from required table if not joined
             if (!$return) {
@@ -200,11 +202,15 @@ class Row implements \JsonSerializable {
                     $relTable = $this->_connection->table(Util::camelTo_($name));
                     $relTable->setRowModel($this->getRelTableModel($args));
                 }
-                $relTable->where($where)
-                        ->setExpectedResult(isset($args[0]['returnType']) ?
-                                        $args[0]['returnType'] : Table::RETURN_MODEL);
+                if ($where)
+                    $relTable->where($where);
+                $relTable->setExpectedResult(isset($args[0]['returnType']) ?
+                                $args[0]['returnType'] : Table::RETURN_MODEL);
                 $return = $this->prepSelectRelTable($relTable, $args);
+
                 if (is_object($return) && is_a($return, 'DBScribe\Table')) {
+                    if (!$return->hasCondition())
+                        return new ArrayCollection;
                     $return = $return->select();
                 }
                 if (is_bool($return)) {

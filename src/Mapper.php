@@ -673,11 +673,26 @@ abstract class Mapper extends Row {
             foreach($this->getSettings() as $column => $rel) {
                 if ($rel['type'] === 'ReferenceMany') {
                     $args['relateWhere'] = array();
-                    $nam = (!is_array($this->$column)) ? explode('__:DS:__', $this->$column) : $this->$column;
+                    $columnValue = is_object($this->$column) ? $this->$column->getArrayCopy() : $this->$column;
+                    $nam = !is_array($columnValue) ? explode('__:DS:__', $columnValue) : $columnValue;
                     foreach ($nam as $val) {
                         $args['relateWhere'][] = array(
                             $this->settings[$column]['attrs']['column'] => $val,
                         );
+                    }
+                }
+                else if (!empty($rel['attrs']['referencedBy'])) {
+                    $references = explode(',', $rel['attrs']['referencedBy']);
+                    foreach ($references as $ref) {
+                        $class = stristr($ref, ":", true);
+                        $col = str_replace($class . ':', '', $ref);
+                        if (!class_exists($class))
+                            $class = $this->getNamespace() . '\\' . $class;
+                        if ($class !== $modelTable)
+                            continue;
+                        
+                        $args[0]['like'] = array($col, '%' . $this->$column . '%');
+                        break;
                     }
                 }
             }

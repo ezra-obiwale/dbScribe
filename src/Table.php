@@ -1117,6 +1117,14 @@ class Table {
         }
         return $this;
     }
+    
+    /**
+     * Check if the intending query has conditions to go with it
+     * @return boolean
+     */
+    public function hasCondition() {
+        return ($this->where || $this->customWhere);
+    }
 
     private function returnSelect($return) {
         if (!is_array($return)) {
