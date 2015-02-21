@@ -660,41 +660,29 @@ abstract class Mapper extends Row {
      */
     protected function _preCall(&$name, array &$args) {
         if (!method_exists($this, $name)) {
-            if ($modelTable = self::getModelTable(Util::camelTo_($name))) {
-                $relTable = $this->getConnection()->table($name);
+            $settings = $this->getSettings($name);
+            if ($settings['type'] === 'ReferenceMany') {
+                $modelTable = $settings['attrs']['model'];
+                $args['relateWhere'] = array();
+                $columnValue = is_object($this->$name) ? $this->$name->getArrayCopy() : $this->$name;
+                $nam = !is_array($columnValue) ? explode('__:DS:__', $columnValue) : $columnValue;
+                foreach ($nam as $val) {
+                    $args['relateWhere'][] = array(
+                        $this->settings[$name]['attrs']['column'] => $val,
+                    );
+                }
+            }
+            if ($modelTable || (!$modelTable && $modelTable = self::getModelTable(Util::camelTo_($name)))) {
                 $model = is_array($modelTable) ?
                         new $modelTable[count($modelTable) - 1] :
                         new $modelTable;
+
+                $name = $model->getTableName();
+                $relTable = $this->getConnection()->table($name);
+
                 $model->setConnection($this->getConnection());
                 $model->init($relTable);
                 $args['model'] = $model;
-            }
-            
-            foreach($this->getSettings() as $column => $rel) {
-                if ($rel['type'] === 'ReferenceMany') {
-                    $args['relateWhere'] = array();
-                    $columnValue = is_object($this->$column) ? $this->$column->getArrayCopy() : $this->$column;
-                    $nam = !is_array($columnValue) ? explode('__:DS:__', $columnValue) : $columnValue;
-                    foreach ($nam as $val) {
-                        $args['relateWhere'][] = array(
-                            $this->settings[$column]['attrs']['column'] => $val,
-                        );
-                    }
-                }
-                else if (!empty($rel['attrs']['referencedBy'])) {
-                    $references = explode(',', $rel['attrs']['referencedBy']);
-                    foreach ($references as $ref) {
-                        $class = stristr($ref, ":", true);
-                        $col = str_replace($class . ':', '', $ref);
-                        if (!class_exists($class))
-                            $class = $this->getNamespace() . '\\' . $class;
-                        if ($class !== $modelTable)
-                            continue;
-                        
-                        $args[0]['like'] = array($col, '%' . $this->$column . '%');
-                        break;
-                    }
-                }
             }
         }
     }
@@ -1010,11 +998,11 @@ abstract class Mapper extends Row {
                     $val = $this->$settingKey;
                 }
             }
-            else if (strtolower(@$this->settings[$settingKey]['type']) === 'date' && !empty($val)) {
+            else if (strtolower(@$this->settings[$settingKey]['type']) === 'date' && !empty($val) && !strstr($val, '0000')) {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d');
                 $val = $this->$settingKey;
             }
-            elseif (strtolower(@$this->settings[$settingKey]['type']) === 'time' && !empty($val)) {
+            elseif (strtolower(@$this->settings[$settingKey]['type']) === 'time' && !empty($val) && !strstr($val, '0000')) {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'H:i');
                 $val = $this->$settingKey;
             }
