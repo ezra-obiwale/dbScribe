@@ -863,6 +863,8 @@ class Table {
                 if (empty($value) && $value != 0)
                     continue;
 
+                $column = Util::camelTo_($column);
+
                 if (!in_array($column, $columns))
                     $columns[] = $column;
                 $this->values[$ky][':' . $column] = $value;

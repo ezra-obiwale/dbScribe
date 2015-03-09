@@ -133,14 +133,14 @@ class ArrayCollection extends ArrayObject {
      * it is appended to the collection
      * @param int $index
      * @param mixed $newValue
-     * @return bool
+     * @return \DBScribe\ArrayCollection
      */
     public function set($index, $newValue) {
         if (!$this->offsetSet($index, $newValue)) {
             $this->append($newValue);
         }
 
-        return true;
+        return $this;
     }
 
     /**
