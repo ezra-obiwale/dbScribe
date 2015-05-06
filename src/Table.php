@@ -284,6 +284,12 @@ class Table {
     protected $genQry;
 
     /**
+     * Indicates whether to preserve queries that change the table or not
+     * @var boolean
+     */
+    protected $preserveQueries;
+
+    /**
      * Class contructor
      * @param string $name Name of the table, without the prefix if already
      * supplied in the connection object
@@ -334,6 +340,32 @@ class Table {
             mkdir(DATA, 0777, true);
 
         return $this;
+    }
+
+    /**
+     * Indicates whether to preserve queries that change the table or not
+     * @param bool $bool
+     * @return \DBScribe\Table
+     */
+    public function preserveQueries($bool = true) {
+        $this->preserveQueries = $bool;
+        return $this;
+    }
+
+    protected function doPreserveQueries() {
+        $path = DATA . md5('queries') . DIRECTORY_SEPARATOR;
+        if (!is_dir($path))
+            mkdir($path, 0777, true);
+        $today = Util::createTimestamp(time(), 'Y-m-d');
+        $save = array();
+        if (is_readable($path . $today)) {
+            $save = include $path . $today;
+        }
+        $save[] = array(
+            'q' => $this->query,
+            'v' => $this->values,
+        );
+        Util::updateConfig($path . $today, $save);
     }
 
     /**
@@ -1910,6 +1942,8 @@ class Table {
             $result = $this->getCached();
         }
         if (!$result) {
+            if ($this->preserveQueries && $this->current !== self::OP_SELECT) // keep all queries except selects
+                $this->doPreserveQueries();
             $result = $this->connection->doPrepare($this->query, $this->values, array(
                 'multipleRows' => $this->multiple,
                 'model' => $model

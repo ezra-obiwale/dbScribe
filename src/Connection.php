@@ -445,6 +445,26 @@ class Connection extends \PDO {
     }
 
     /**
+     * Re-processes preserved queries
+     * @param bool $keepFiles
+     * @return \DBScribe\Connection
+     */
+    public function redoPresevedQueries($keepFiles = false) {
+        $path = DATA . md5('queries') . DIRECTORY_SEPARATOR;
+        foreach (scandir($path) as $file) {
+            if (in_array($file, array('.', '..')))
+                continue;
+            $queries = include $path . $file;
+            foreach ($queries as $query) {
+                $this->doPrepare($query['q'], $query['v'], array('multipleRows' => true));
+            }
+            if (!$keepFiles)
+                unlink($path . $file);
+        }
+        return $this;
+    }
+
+    /**
      * Prepares the query and executes against given values, if any
      * @param string $query
      * @param array $values
