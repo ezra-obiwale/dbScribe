@@ -1812,10 +1812,13 @@ class Table {
      * Updates rows that exist and creates those that don't
      * @param array $values
      * @param string|integer|array $whereColumn
+     * @param string|bool $generateIds If string, indicates a YES and the primary column name.
+     * If bool TRUE, it indicates YES and primay column name 'id'
+     * If bool FALSE, it indicates NO.
      * @return boolean
      * @todo Refactor to accomodate large bulk of data
      */
-    public function upsert(array $values, $whereColumn = 'id') {
+    public function upsert(array $values, $whereColumn = 'id', $generateIds = true) {
         if (!is_array($whereColumn))
             $whereColumn = array($whereColumn);
 
@@ -1832,19 +1835,22 @@ class Table {
             if ($ky === 0)
                 $noOfColumns = count($rowArray);
 
-            if (count($rowArray) !== $noOfColumns) {
-                throw new Exception('All rows must have the same number of columns in table "' . $this->name .
-                '". Set others as null');
-            }
-
             if (count($rowArray) === 0)
                 throw new Exception('You cannot insert an empty row into table "' . $this->name . '"');
+
+            if ($generateIds) {
+                $id = is_string($generateIds) ? $generateIds : 'id';
+                if (!array_key_exists($id, $rowArray))
+                    $rowArray[$id] = Util::createGUID();
+            }
 
             foreach ($rowArray as $column => &$value) {
                 if (empty($value) && $value != 0)
                     continue;
 
-                if (!in_array($column, $whereColumn)) {
+                $column = Util::camelTo_($column);
+
+                if (!$ky && !in_array($column, $whereColumn)) {
                     if ($update)
                         $update .= ', ';
                     $update .= '`' . $column . '`=VALUES(' . $column . ')';

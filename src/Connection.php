@@ -53,7 +53,7 @@ class Connection extends \PDO {
      * @param string $password
      * @param array $options
      */
-    public function __construct($dsn, $username, $password, $options = array()) {
+    public function __construct($dsn, $username = null, $password = null, $options = array()) {
         $this->dbName = str_replace('dbname=', '', stristr($dsn, 'dbname='));
 
         if (@$options['create']) {

@@ -51,6 +51,7 @@ abstract class Mapper extends Row {
 
         if ($save || !is_readable($path))
             $this->save($path, $this->getAnnotations());
+        session_write_close();
     }
 
     /**
