@@ -138,6 +138,7 @@ class Repository extends Table {
         $this->limit(1);
         $result = $this->findWhere($criteria, $returnType);
         if (is_array($result)) {
+            $result = array_values($result);
             return ($returnType === Table::RETURN_JSON) ? json_encode($result[0]) : $result[0];
         }
         else if (is_object($result)) {

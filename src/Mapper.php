@@ -662,15 +662,18 @@ abstract class Mapper extends Row {
     protected function _preCall(&$name, array &$args) {
         if (!method_exists($this, $name)) {
             $settings = $this->getSettings($name);
-            if ($settings['type'] === 'ReferenceMany') {
-                $modelTable = $settings['attrs']['model'];
+            if (array_key_exists('reference', $settings['attrs'])) {
+                $modelTable = array_key_exists('model', $settings['attrs']) ?
+                        $settings['attrs']['model'] :
+                        $settings['attrs']['reference']['model'];
                 $args['relateWhere'] = array();
                 $columnValue = is_object($this->$name) ? $this->$name->getArrayCopy() : $this->$name;
                 $nam = !is_array($columnValue) ? explode('__:DS:__', $columnValue) : $columnValue;
+                $column = array_key_exists('column', $settings['attrs']) ?
+                        $settings['attrs']['column'] :
+                        $settings['attrs']['reference']['column'];
                 foreach ($nam as $val) {
-                    $args['relateWhere'][] = array(
-                        $this->settings[$name]['attrs']['column'] => $val,
-                    );
+                    $args['relateWhere'][] = array($column => $val);
                 }
             }
             if ($modelTable || (!$modelTable && $modelTable = self::getModelTable(Util::camelTo_($name)))) {

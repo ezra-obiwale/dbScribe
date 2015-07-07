@@ -15,7 +15,7 @@ class Util {
      */
     public static function createGUID() {
         if (function_exists('com_create_guid')) {
-            return com_create_guid();
+            return substr(com_create_guid(),1,36);
         }
         else {
             mt_srand((double) microtime() * 10000);
