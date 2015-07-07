@@ -1844,6 +1844,12 @@ class Table {
                     $rowArray[$id] = Util::createGUID();
             }
 
+            if ($generateIds) {
+                $id = is_string($generateIds) ? $generateIds : 'id';
+                if (!array_key_exists($id, $rowArray))
+                    $rowArray[$id] = Util::createGUID();
+            }
+
             foreach ($rowArray as $column => &$value) {
                 if (empty($value) && $value != 0)
                     continue;
