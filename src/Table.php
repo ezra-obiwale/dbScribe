@@ -1740,7 +1740,7 @@ class Table {
 
         $nColumns = 0;
         $columns = array();
-        foreach ($values as $ky => $row) {
+        foreach (array_values($values) as $ky => $row) {
             $rowArray = $this->checkModel($row, true);
             if ($ky == 0)
                 $nColumns = array_keys($rowArray);

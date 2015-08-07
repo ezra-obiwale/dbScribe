@@ -51,7 +51,7 @@ abstract class Mapper extends Row {
 
         if ($save || !is_readable($path))
             $this->save($path, $this->getAnnotations());
-        session_write_close();
+        //session_write_close();
     }
 
     /**
@@ -1122,7 +1122,8 @@ abstract class Mapper extends Row {
         foreach ($array as $name => $value) {
             if (($value === null && !$withNull)) {
                 continue;
-            }
+            } else if (is_object($value) && is_a($value, 'DBScribe\ArrayCollection'))
+                $value = $value->getArrayCopy();
             $return[\Util::camelTo_($name)] = $value;
         }
         return $return;

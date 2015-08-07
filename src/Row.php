@@ -53,8 +53,7 @@ class Row implements \JsonSerializable {
             $method = 'set' . ucfirst($property);
             if (method_exists($this, $method)) {
                 $this->$method($value);
-            }
-            elseif (property_exists($this, $property)) {
+            } elseif (property_exists($this, $property)) {
                 $this->$property = $value;
             }
         }
@@ -143,11 +142,9 @@ class Row implements \JsonSerializable {
         if (!method_exists($this, $name)) {
             if (!$this->_connection && $this->_table) {
                 $this->_connection = $this->_table->getConnection();
-            }
-            else if (!$this->_table && $this->_connection) {
+            } else if (!$this->_table && $this->_connection) {
                 $this->_table = $this->_connection->table($this->getTableName(), $this);
-            }
-            else if (!$this->_connection && !$this->_table) {
+            } else if (!$this->_connection && !$this->_table) {
                 return new ArrayCollection;
             }
         }
