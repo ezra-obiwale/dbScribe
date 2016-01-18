@@ -1,0 +1,233 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Dbscribe by ezra-obiwale</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-dark.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Dbscribe</h1>
+        <p>PDO Abstraction Classes to manage Database operations including database, table, and column creation and auto-update, and CRUD functions from within PHP </p>
+        <p class="view"><a href="https://github.com/ezra-obiwale/DBScribe">View the Project on GitHub <small>ezra-obiwale/DBScribe</small></a></p>
+        <ul>
+          <li><a href="https://github.com/ezra-obiwale/DBScribe/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/ezra-obiwale/DBScribe/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/ezra-obiwale/DBScribe">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>
+<a id="pdo-abstraction" class="anchor" href="#pdo-abstraction" aria-hidden="true"><span class="octicon octicon-link"></span></a>PDO Abstraction</h1>
+
+<hr>
+
+<p>This library can create your databases, tables and columns. It can further keep an eye on your models to see if any column needs to be updated. This constant monitoring is based on annotations.</p>
+
+<h2>
+<a id="general-uses" class="anchor" href="#general-uses" aria-hidden="true"><span class="octicon octicon-link"></span></a>General uses</h2>
+
+<p>Below is a table showing the general uses of each file:</p>
+
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Uses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Annotation.php</td>
+<td>Used to read annotations on models. Only used internally. Ignore.</td>
+</tr>
+<tr>
+<td>ArrayCollection.php</td>
+<td>An iteratable collection of models with additional methods for navigation.</td>
+</tr>
+<tr>
+<td>Connection.php</td>
+<td>Extends PDO and accepts PDO options to create a connection to the database.</td>
+</tr>
+<tr>
+<td>Mapper.php</td>
+<td>Extends Row. Required class to be extended by models for auto-generation and monitoring</td>
+</tr>
+<tr>
+<td>Repository.php</td>
+<td>Extends Table. Contains additional methods to for easier db access.</td>
+</tr>
+<tr>
+<td>Row.php</td>
+<td>A typical object representing a row in the database.</td>
+</tr>
+<tr>
+<td>Table.php</td>
+<td>Represents a table in the database and provides methods for operations.</td>
+</tr>
+<tr>
+<td>Util.php</td>
+<td>Contains utility methods used in operations and may be used by developers too if necessary.</td>
+</tr>
+</tbody>
+</table>
+
+<h2>
+<a id="basic-usage" class="anchor" href="#basic-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic Usage</h2>
+
+<h3>
+<a id="connecting-to-a-database" class="anchor" href="#connecting-to-a-database" aria-hidden="true"><span class="octicon octicon-link"></span></a>Connecting to a database</h3>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$connection</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Connection</span>(<span class="pl-s"><span class="pl-pds">'</span>mysql:host=localhost;dbname=test_db<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>db_user<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>db_user_password<span class="pl-pds">'</span></span>, <span class="pl-c1">array</span>(</span>
+<span class="pl-s1">        <span class="pl-s"><span class="pl-pds">'</span>tablePrefix<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>ds_<span class="pl-pds">'</span></span>, <span class="pl-c">// optional - Indicates the prefix to add to table names</span></span>
+<span class="pl-s1">        <span class="pl-s"><span class="pl-pds">'</span>create<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-c1">true</span>, <span class="pl-c">// optional - Indicates whether to create the database if it doesn't exist</span></span>
+<span class="pl-s1">    ));</span></pre></div>
+
+<h3>
+<a id="connecting-to-a-table" class="anchor" href="#connecting-to-a-table" aria-hidden="true"><span class="octicon octicon-link"></span></a>Connecting to a table</h3>
+
+<p>Example database table columns</p>
+
+<p><em>Table <strong>ds_user</strong></em></p>
+
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>first_name</th>
+<th>last_name</th>
+<th>gender</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Adam</td>
+<td>Freeman</td>
+<td>male</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Eve</td>
+<td>Gerald</td>
+<td>female</td>
+</tr>
+</tbody>
+</table>
+
+<ul>
+<li><strong>Method 1</strong></li>
+</ul>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span> <span class="pl-k">=</span> <span class="pl-smi">$connection</span><span class="pl-k">-&gt;</span>table(<span class="pl-s"><span class="pl-pds">'</span>user<span class="pl-pds">'</span></span>); <span class="pl-c">// Note: Table name without prefix</span></span></pre></div>
+
+<ul>
+<li><strong>Method 2</strong></li>
+</ul>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Table</span>(<span class="pl-s"><span class="pl-pds">'</span>user<span class="pl-pds">'</span></span>, <span class="pl-smi">$connection</span>); <span class="pl-c">// Note: Table name without prefix</span></span></pre></div>
+
+<h3>
+<a id="crud" class="anchor" href="#crud" aria-hidden="true"><span class="octicon octicon-link"></span></a>CRUD</h3>
+
+<ul>
+<li><strong>Creating entries</strong></li>
+</ul>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-c">// using array</span></span>
+<span class="pl-s1">    <span class="pl-smi">$row1</span> <span class="pl-k">=</span> <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>first_name<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>last_name<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Adeyemi<span class="pl-pds">'</span></span>);</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-c">// using objects</span></span>
+<span class="pl-s1">    <span class="pl-smi">$row2</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Row</span>();</span>
+<span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">firstName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Segun<span class="pl-pds">'</span></span>;</span>
+<span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">lastName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Ajayi<span class="pl-pds">'</span></span>;</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>insert(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>));</span></pre></div>
+
+<ul>
+<li><strong>Reading entries</strong></li>
+</ul>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>select(); <span class="pl-c">// Returns all rows</span></span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$criteria</span> <span class="pl-k">=</span> <span class="pl-c1">array</span>(</span>
+<span class="pl-s1">        <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Segun<span class="pl-pds">'</span></span>),</span>
+<span class="pl-s1">        <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>),</span>
+<span class="pl-s1">    );</span>
+<span class="pl-s1">    <span class="pl-smi">$rows</span> <span class="pl-k">=</span> <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>select(<span class="pl-smi">$criteria</span>); <span class="pl-c">// Returns object ArrayCollection containing 2 Row objects</span></span>
+<span class="pl-s1">    <span class="pl-c">/* $tblUser-&gt;select($criteria, Table::RETURN_DEFAULT) returns an array of row arrays</span></span>
+<span class="pl-s1"><span class="pl-c">     * $tblUser-&gt;select($criteria, Table::RETURN_JSON) returns (You got it right) JSON objects */</span></span></pre></div>
+
+<ul>
+<li><strong>Updating entries</strong></li>
+</ul>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$row1</span> <span class="pl-k">=</span> <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>first_name<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Segun<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>last_name<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Ayodeji<span class="pl-pds">'</span></span>);</span>
+<span class="pl-s1">    <span class="pl-smi">$row2</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Row</span>();</span>
+<span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">firstName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>;</span>
+<span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">lastName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Asegun<span class="pl-pds">'</span></span>;</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>update(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>), <span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span>); <span class="pl-c">// updates the rows where the first_name is as given in the rows to update</span></span></pre></div>
+
+<ul>
+<li><strong>Deleting entries</strong></li>
+</ul>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>delete(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>)); <span class="pl-c">// deletes based on the columns provided in the rows</span></span></pre></div>
+
+<h2>
+<a id="advanced-usage" class="anchor" href="#advanced-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Advanced Usage</h2>
+
+<h3>
+<a id="creating-models" class="anchor" href="#creating-models" aria-hidden="true"><span class="octicon octicon-link"></span></a>Creating Models</h3>
+
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-k">class</span> <span class="pl-en">User</span> <span class="pl-k">extends</span> <span class="pl-e">Mapper</span> {</span>
+<span class="pl-s1">        <span class="pl-c">/** @DBS\Int (primary=true,autoIncrement=true,size=2) **/</span></span>
+<span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$id</span>;</span>
+<span class="pl-s1">        <span class="pl-c">/** @DBS\String (size=20) **/</span></span>
+<span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$firstName</span>;</span>
+<span class="pl-s1">        <span class="pl-c">/** @DBS\String (size=20) **/</span></span>
+<span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$lastName</span>;</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-k">function</span> <span class="pl-en">preSave</span>() {</span>
+<span class="pl-s1">            <span class="pl-c">// do something before saving to database</span></span>
+<span class="pl-s1">        }</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-k">function</span> <span class="pl-en">postFetch</span>() {</span>
+<span class="pl-s1">            <span class="pl-c">// do something after retrieving from database</span></span>
+<span class="pl-s1">        }</span>
+<span class="pl-s1">    }</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$user</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">User</span>();</span>
+<span class="pl-s1">    <span class="pl-smi">$user</span><span class="pl-k">-&gt;</span><span class="pl-smi">firstName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Emmanuella<span class="pl-pds">'</span></span>;</span>
+<span class="pl-s1">    <span class="pl-smi">$user</span><span class="pl-k">-&gt;</span><span class="pl-smi">lastName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Oyewumi<span class="pl-pds">'</span></span>;</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$repoUser</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Repository</span>(<span class="pl-smi">$user</span>, <span class="pl-smi">$connection</span>);</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$repoUser</span><span class="pl-k">-&gt;</span>insert(<span class="pl-c1">array</span>(<span class="pl-smi">$user</span>));</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-smi">$repoUser</span><span class="pl-k">-&gt;</span>fetchAll(); <span class="pl-c">// same as select() without criteria</span></span>
+<span class="pl-s1">    <span class="pl-smi">$repoUser</span><span class="pl-k">-&gt;</span>findOneBy(<span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>Emmanuella<span class="pl-pds">'</span></span>);</span>
+<span class="pl-s1">    <span class="pl-smi">$repoUser</span><span class="pl-k">-&gt;</span>findWhere([<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>]);</span>
+<span class="pl-s1">    <span class="pl-smi">$repoUser</span><span class="pl-k">-&gt;</span>findById(<span class="pl-c1">2</span>);</span>
+<span class="pl-s1"></span></pre></div>
+      </section>
+    </div>
+    <footer>
+      <p>Project maintained by <a href="https://github.com/ezra-obiwale">ezra-obiwale</a></p>
+      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
+    </footer>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
