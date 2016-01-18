@@ -24,3 +24,9 @@ There two ways to install DBScribe.
 2. MANUAL
    - Create "d-scribe/db-scribe" directory in your vendor directory
    - Copy the files of DBScribe into that directory
+
+
+USAGE EXAMPLES
+==============
+
+<http://ezra-obiwale.github.io/DBScribe/ />

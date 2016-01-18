@@ -5,17 +5,13 @@ namespace DBScribe;
 use Exception;
 
 /**
- * Description of Repository
+ * This class provides additional methods to those in the table to make
+ * operations easier. It should be used when using the Mapper class.
  *
- * @author topman
+ * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 class Repository extends Table {
 
-    /**
-     * Table Mapper object
-     * @var Mapper|Table
-     */
-    private $table;
     private $isSelect;
     private $alwaysJoin;
 
@@ -25,7 +21,8 @@ class Repository extends Table {
      * @param Connection $connection
      * @param bool $delayExecution
      */
-    public function __construct(Mapper $table, Connection $connection = null, $delayExecution = false) {
+    public function __construct(Mapper $table, Connection $connection = null,
+            $delayExecution = false) {
         if ($connection) {
             $table->setConnection($connection);
         }
@@ -33,12 +30,11 @@ class Repository extends Table {
             $connection = $table->getConnection();
         }
         if (!$connection)
-            throw new Exception('Repository must have a valid connection: ' . $table->getTableName());
+                throw new Exception('Repository must have a valid connection: ' . $table->getTableName());
 
         parent::__construct($table->getTableName(), $connection, $table);
         $table->init($this);
-        if ($delayExecution)
-            $this->delayExecute();
+        if ($delayExecution) $this->delayExecute();
         $this->alwaysJoin = array();
     }
 
@@ -49,10 +45,9 @@ class Repository extends Table {
      * @return mixed
      */
     public function fetchAll($returnType = Table::RETURN_MODEL) {
-        $return = $this->select(array(), $returnType)->execute();
-
-        if (is_bool($return))
-            return new ArrayCollection();
+        $return = $this->select(array(), $returnType);
+        if (is_a($return, 'DBScribe\Table')) $return = $return->execute();
+        if (is_bool($return)) return new ArrayCollection();
 
         return $return;
     }
@@ -66,9 +61,10 @@ class Repository extends Table {
      * @return mixed
      */
     public function findBy($column, $value, $returnType = Table::RETURN_MODEL) {
-        $return = $this->select(array(array(Util::camelTo_($column) => $value)), $returnType)->execute();
-        if (is_bool($return))
-            return new ArrayCollection();
+        $return = $this->select(array(array(Util::camelTo_($column) => $value)),
+                $returnType);
+        if (is_a($return, 'DBScribe\Table')) $return = $return->execute();
+        if (is_bool($return)) return new ArrayCollection();
 
         return $return;
     }
@@ -123,7 +119,8 @@ class Repository extends Table {
         if (!is_array($criteria)) {
             $criteria = array($criteria);
         }
-        $return = $this->select($criteria, $returnType)->execute();
+        $return = $this->select($criteria, $returnType);
+        if (is_a($return, 'DBScribe\Table')) $return = $return->execute();
         return $return;
     }
 
@@ -138,7 +135,9 @@ class Repository extends Table {
         $this->limit(1);
         $result = $this->findWhere($criteria, $returnType);
         if (is_array($result)) {
-            return ($returnType === Table::RETURN_JSON) ? json_encode($result[0]) : $result[0];
+            $result = array_values($result);
+            return ($returnType === Table::RETURN_JSON) ? json_encode($result[0])
+                        : $result[0];
         }
         else if (is_object($result)) {
             return $result->first();
@@ -149,7 +148,8 @@ class Repository extends Table {
         try {
             if (strtolower(substr($name, 0, 6)) === 'findby') {
                 $column = ucfirst(substr($name, 6));
-                return call_user_func_array(array($this, 'findBy'), array_merge(array($column), $arguments));
+                return call_user_func_array(array($this, 'findBy'),
+                        array_merge(array($column), $arguments));
             }
         }
         catch (Exception $ex) {
@@ -221,7 +221,7 @@ class Repository extends Table {
 
     /**
      * Deletes data from the database
-     * @param array|Mapper $model a model or an array of models to insert
+     * @param array|Mapper $model a model or an array of models to delete
      * @return Repository
      */
     public function delete($model) {

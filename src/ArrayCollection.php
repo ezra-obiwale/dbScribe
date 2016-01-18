@@ -1,8 +1,5 @@
 <?php
 
-/*
- */
-
 namespace DBScribe;
 
 use ArrayObject;

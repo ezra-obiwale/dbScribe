@@ -3,9 +3,9 @@
 namespace DBScribe;
 
 /**
- * Description of Annotation
+ * This class reads annotations from a given class
  *
- * @author topman
+ * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 class Annotation {
 
