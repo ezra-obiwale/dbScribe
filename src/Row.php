@@ -35,8 +35,7 @@ class Row implements \JsonSerializable {
      * @return string
      */
     final public function getTableName() {
-        if ($this->_tableName !== null)
-            return $this->_tableName;
+        if ($this->_tableName !== null) return $this->_tableName;
 
         $exp = explode('\\', get_called_class());
         return \Util::camelTo_($exp[count($exp) - 1]);
@@ -53,7 +52,8 @@ class Row implements \JsonSerializable {
             $method = 'set' . ucfirst($property);
             if (method_exists($this, $method)) {
                 $this->$method($value);
-            } elseif (property_exists($this, $property)) {
+            }
+            elseif (property_exists($this, $property)) {
                 $this->$property = $value;
             }
         }
@@ -87,7 +87,8 @@ class Row implements \JsonSerializable {
         }
 
         if (method_exists($this, '__construct')) {
-            call_user_func_array(array($this, '__construct'), $contructorParameters);
+            call_user_func_array(array($this, '__construct'),
+                    $contructorParameters);
         }
 
         return $this;
@@ -111,7 +112,7 @@ class Row implements \JsonSerializable {
      */
     final public function __set($property, $value) {
         if (in_array($property, array('_connection')))
-            throw new \Exception('Property "' . $property . '" is reserved.');
+                throw new \Exception('Property "' . $property . '" is reserved.');
         $this->_set($property, $value);
     }
 
@@ -142,9 +143,12 @@ class Row implements \JsonSerializable {
         if (!method_exists($this, $name)) {
             if (!$this->_connection && $this->_table) {
                 $this->_connection = $this->_table->getConnection();
-            } else if (!$this->_table && $this->_connection) {
-                $this->_table = $this->_connection->table($this->getTableName(), $this);
-            } else if (!$this->_connection && !$this->_table) {
+            }
+            else if (!$this->_table && $this->_connection) {
+                $this->_table = $this->_connection->table($this->getTableName(),
+                        $this);
+            }
+            else if (!$this->_connection && !$this->_table) {
                 return new ArrayCollection;
             }
         }
@@ -162,10 +166,10 @@ class Row implements \JsonSerializable {
                 }
                 return $this;
             }
-
             if (is_array($args['relateWhere']) && count($args['relateWhere'])) {
                 $where = $args['relateWhere'];
-            } else if ($relationships = $this->_table->getTableRelationships($name)) {
+            }
+            else if ($relationships = $this->_table->getTableRelationships($name)) {
                 $by = Util::camelTo_($this->_by);
                 foreach ($relationships as $relationship) {
                     if ($by && $relationship['column'] !== $by) {
@@ -175,20 +179,22 @@ class Row implements \JsonSerializable {
                     $column = Util::_toCamel($relationship['column']);
                     if (isset($args[0]['push']) && $args[0]['push'] && !$relationship['push'] ||
                             isset($args[0]['pull']) && $args[0]['pull'] && $relationship['push'])
-                        continue;
+                            continue;
                     if (property_exists($this, $column)) {
-                        $where = array_merge($where, $this->getRelTableWhere($args, $relationship['refColumn'], $this->{$column}));
+                        $where = array_merge($where,
+                                $this->getRelTableWhere($args,
+                                        $relationship['refColumn'],
+                                        $this->{$column}));
                     }
                 }
             }
-
             $this->_by = null;
-            if (empty($where))
-                return new ArrayCollection;
-
+            if (!count($where)) // Ensure that not all rows are returned
+                    return new ArrayCollection;
             // check joined tables' results
             $compressed = Util::compressArray($where);
-            $return = $this->_table->seekJoin($name, $compressed, $this->getRelTableModel($args), $args);
+            $return = $this->_table->seekJoin($name, $compressed,
+                    $this->getRelTableModel($args), $args);
 
             // select from required table if not joined
             if (!$return) {
@@ -207,7 +213,6 @@ class Row implements \JsonSerializable {
                     return new ArrayCollection;
                 }
             }
-
             return $return;
         }
     }
@@ -229,11 +234,11 @@ class Row implements \JsonSerializable {
      */
     private function prepSelectRelTable(Table &$relTable, array $callArgs) {
         foreach ($callArgs[0] as $method => $args) {
-            if ($method === 'where')
-                continue;
+            if ($method === 'where') continue;
             if (method_exists($relTable, $method)) {
                 $args = is_array($args) ? $args : array($args);
-                $relTable = call_user_func_array(array($relTable, $method), $args);
+                $relTable = call_user_func_array(array($relTable, $method),
+                        $args);
             }
         }
         return $relTable;
@@ -247,7 +252,8 @@ class Row implements \JsonSerializable {
     private function getRelTableModel(array $callArgs) {
         if (isset($callArgs['model']) && is_object($callArgs['model'])) {
             return $callArgs['model'];
-        } else if (isset($callArgs['model']) && is_array($callArgs['model']) && isset($callArgs['model']['rowModel'])) {
+        }
+        else if (isset($callArgs['model']) && is_array($callArgs['model']) && isset($callArgs['model']['rowModel'])) {
             return $callArgs['model']['rowModel'];
         }
 
@@ -266,22 +272,27 @@ class Row implements \JsonSerializable {
     private function getRelTableWhere(array &$callArgs, $column, $value) {
         $where = array();
 
-        if (!isset($callArgs[0]) || (isset($callArgs[0]) && !is_array($callArgs[0])) || (isset($callArgs[0]) && is_array($callArgs[0]) && !isset($callArgs[0]['where']))) {
+        if (!isset($callArgs[0]) || (isset($callArgs[0]) && !is_array($callArgs[0])) ||
+                (isset($callArgs[0]) && is_array($callArgs[0]) && !isset($callArgs[0]['where']))) {
             $where[] = array($column => $value);
-        } else if ((isset($callArgs[0]) && is_array($callArgs[0]) && isset($callArgs[0]['where']))) {
+        }
+        else if ((isset($callArgs[0]) && is_array($callArgs[0]) && isset($callArgs[0]['where']))) {
             if (is_array($callArgs[0]['where'])) {
                 foreach ($callArgs[0]['where'] as $row) {
                     if (is_object($row)) {
                         $row->$column = $value;
-                    } else if (is_array($row)) {
+                    }
+                    else if (is_array($row)) {
                         $row[$column] = $value;
-                    } else {
+                    }
+                    else {
                         throw new \Exception('Related Table Call Error: Option where value must be an array of \DBScribe\Rows or array of columns to values');
                     }
 
                     $where[] = $row;
                 }
-            } else if (is_object($row)) {
+            }
+            else if (is_object($row)) {
                 $row->$column = $value;
                 $where[] = $row;
             }

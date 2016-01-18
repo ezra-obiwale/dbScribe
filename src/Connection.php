@@ -53,17 +53,18 @@ class Connection extends \PDO {
      * @param string $password
      * @param array $options
      */
-    public function __construct($dsn, $username = null, $password = null, $options = array()) {
+    public function __construct($dsn, $username = null, $password = null,
+            $options = array()) {
         $this->dbName = str_replace('dbname=', '', stristr($dsn, 'dbname='));
 
         if (@$options['create']) {
-            parent::__construct(stristr($dsn, ';dbname=', true), $username, $password);
+            parent::__construct(stristr($dsn, ';dbname=', true), $username,
+                    $password);
             if ($this->newDB($this->dbName) && $this->dbName) {
                 $this->query('use `' . $this->dbName . '`');
             }
         }
-        else
-            parent::__construct($dsn, $username, $password, $options);
+        else parent::__construct($dsn, $username, $password, $options);
 
         $this->dsn = $dsn;
         $this->username = $username;
@@ -148,7 +149,8 @@ class Connection extends \PDO {
         $dsn = stristr($this->dsn, 'dbname=', true);
         $this->dsn = ($dsn) ? $dsn . 'dbname=' . $dbName : $this->dsn . 'dbname=' . $dbName;
 
-        parent::__construct($this->dsn, $this->username, $this->password, $this->options);
+        parent::__construct($this->dsn, $this->username, $this->password,
+                $this->options);
         return $this;
     }
 
@@ -168,7 +170,8 @@ class Connection extends \PDO {
         $qry .= "CREATE TABLE IF NOT EXISTS `" . $table->getName() . "` (";
 
         $newColumns = $table->getNewColumns(true);
-        if ($table->getNewPrimarykey() && array_key_exists($table->getNewPrimarykey(), $newColumns)) {
+        if ($table->getNewPrimarykey() && array_key_exists($table->getNewPrimarykey(),
+                        $newColumns)) {
             if (!is_string($table->getNewPrimarykey()) || !is_string($newColumns[$table->getNewPrimaryKey()])) {
                 throw new \Exception('Column names and information <b>MUST</b> both be strings for table "' .
                 $table->getName() . '"');
@@ -176,8 +179,7 @@ class Connection extends \PDO {
 
             $qry .= '`' . $table->getNewPrimarykey() . '` ' . $newColumns[$table->getNewPrimarykey()];
             unset($newColumns[$table->getNewPrimaryKey()]);
-            if (count($newColumns))
-                $qry .= ', ';
+            if (count($newColumns)) $qry .= ', ';
         }
 
         $cnt = 0;
@@ -187,8 +189,7 @@ class Connection extends \PDO {
                 $table->getName() . '"');
             }
 
-            if ($cnt > 0)
-                $qry .= ", ";
+            if ($cnt > 0) $qry .= ", ";
 
             $qry .= "`{$name}` {$infoArray}";
 
@@ -196,15 +197,14 @@ class Connection extends \PDO {
         }
 
         if ($table->getNewPrimaryKey())
-            $qry .= ', PRIMARY KEY (`' . $table->getNewPrimaryKey(true) . '`)';
+                $qry .= ', PRIMARY KEY (`' . $table->getNewPrimaryKey(true) . '`)';
 
         if (count($table->getNewReferences()) > 0) {
             $qry .= ", ";
 
             $cnt = 1;
             foreach ($table->getNewReferences() as $column => $infoArray) {
-                if ($cnt > 1)
-                    $qry .= ", ";
+                if ($cnt > 1) $qry .= ", ";
 
                 $qry .= "KEY `" . $column . "` (`" . $column . "`)";
 
@@ -217,15 +217,13 @@ class Connection extends \PDO {
 
             $cnt = 1;
             foreach ($table->getNewIndexes(true) as $column => $type) {
-                if ($cnt > 1)
-                    $qry .= ", ";
+                if ($cnt > 1) $qry .= ", ";
                 $qry .= $type . ' (`' . $column . '`)';
                 $cnt++;
             }
         }
 
-        if (!$table->getDescription())
-            $table->setDescription();
+        if (!$table->getDescription()) $table->setDescription();
 
         if (count($table->getNewReferences()) > 0) {
             foreach ($table->getNewReferences(true) as $column => $infoArray) {
@@ -279,8 +277,7 @@ class Connection extends \PDO {
             $iQry = '';
             foreach ($table->getDropIndexes(true) as $column) {
                 if (array_key_exists($column, $table->getIndexes())) {
-                    if ($iQry)
-                        $iQry .= ',';
+                    if ($iQry) $iQry .= ',';
                     $iQry .= ' DROP INDEX `' . $table->getIndexes($column) . '`';
                 }
                 $cnt++;
@@ -297,8 +294,7 @@ class Connection extends \PDO {
             foreach ($dropColumns as $column) {
                 if (in_array($column, $table->getColumns(true))) {
                     $qry .= ' DROP COLUMN `' . $column . '`';
-                    if ($cnt < count($dropColumns))
-                        $qry .= ', ';
+                    if ($cnt < count($dropColumns)) $qry .= ', ';
                 }
                 $cnt++;
             }
@@ -307,12 +303,13 @@ class Connection extends \PDO {
 
         if ($table->shouldDropPrimaryKey(true)) {
             if (!in_array($table->getPrimaryKey(), $dropColumns))
-                $qry .= $alter . ' DROP PRIMARY KEY;';
+                    $qry .= $alter . ' DROP PRIMARY KEY;';
         }
 
         if (count($table->getNewColumns())) {
             $qry .= ' ' . $alter;
-            $qry .= $this->addNewColumns($table->getNewColumns(true), $table, $dropColumns);
+            $qry .= $this->addNewColumns($table->getNewColumns(true), $table,
+                    $dropColumns);
             $qry .= ';';
         }
 
@@ -327,9 +324,8 @@ class Connection extends \PDO {
                 if (in_array($column, $table->getColumns(true))) {
                     $query .= ' CHANGE `' . $column . '` `' . $column . '` ' . $desc;
                     if ($column == $table->getNewPrimarykey())
-                        $query .= ' PRIMARY KEY FIRST';
-                    if ($cnt < count($cols))
-                        $query .= ', ';
+                            $query .= ' PRIMARY KEY FIRST';
+                    if ($cnt < count($cols)) $query .= ', ';
                     $addQuery = true;
                 } else {
                     $addNew[$column] = $desc;
@@ -344,25 +340,22 @@ class Connection extends \PDO {
                 $qry .= ';';
             }
 
-            if ($addQuery)
-                $qry .= $query;
+            if ($addQuery) $qry .= $query;
         }
 
         $newIndexes = $table->getNewIndexes(true);
         $newIndexesCount = count($newIndexes);
-        if ($newIndexes)
-            $indexColumns = array_keys($newIndexes);
-        if ($newIndexesCount && ($newIndexesCount !== 1 || ($newIndexesCount === 1 && $indexColumns[0] !== $table->getNewPrimarykey()))) {
+        if ($newIndexes) $indexColumns = array_keys($newIndexes);
+        if ($newIndexesCount && ($newIndexesCount !== 1 || ($newIndexesCount ===
+                1 && $indexColumns[0] !== $table->getNewPrimarykey()))) {
             $qry .= $alter;
 
             $cnt = 1;
             foreach ($newIndexes as $column => $type) {
-                if ($table->getNewPrimarykey() === $column)
-                    continue;
+                if ($table->getNewPrimarykey() === $column) continue;
 
                 $qry .= ' ADD ' . $type . ' (`' . $column . '`)';
-                if ($cnt < $newIndexesCount)
-                    $qry .= ', ';
+                if ($cnt < $newIndexesCount) $qry .= ', ';
 
                 $cnt++;
             }
@@ -389,15 +382,15 @@ class Connection extends \PDO {
         return $return;
     }
 
-    private function addNewColumns(array $columns, Table $table, array $dropColumns) {
+    private function addNewColumns(array $columns, Table $table,
+            array $dropColumns) {
         $qry = '';
         $cnt = 1;
         foreach ($columns as $column => $desc) {
-            if (!in_array($column, $table->getColumns(true)) ||
-                    (in_array($column, $table->getColumns(true)) &&
-                    in_array($column, $dropColumns))) {
-                if ($qry)
-                    $qry .= ',';
+            if (!in_array($column, $table->getColumns(true)) || (in_array($column,
+                            $table->getColumns(true)) && in_array($column,
+                            $dropColumns))) {
+                if ($qry) $qry .= ',';
                 $qry .= ' ADD COLUMN `' . $column . '` ' . $desc;
             }
             $cnt++;
@@ -452,14 +445,13 @@ class Connection extends \PDO {
     public function redoPresevedQueries($keepFiles = false) {
         $path = DATA . md5('queries') . DIRECTORY_SEPARATOR;
         foreach (scandir($path) as $file) {
-            if (in_array($file, array('.', '..')))
-                continue;
+            if (in_array($file, array('.', '..'))) continue;
             $queries = include $path . $file;
             foreach ($queries as $query) {
-                $this->doPrepare($query['q'], $query['v'], array('multipleRows' => true));
+                $this->doPrepare($query['q'], $query['v'],
+                        array('multipleRows' => true));
             }
-            if (!$keepFiles)
-                unlink($path . $file);
+            if (!$keepFiles) unlink($path . $file);
         }
         return $this;
     }
@@ -477,24 +469,25 @@ class Connection extends \PDO {
      * @throws \Exception
      * @todo use PDO::FETCH_INTO; PDO::FETCH_INTO repeats the last row many times over
      */
-    public function doPrepare($query, array $values = null, array $options = array()) {
+    public function doPrepare($query, array $values = null,
+            array $options = array(), $tb = null) {
         try {
-            $multipleRows = isset($options['multipleRows']) ? $options['multipleRows'] : false;
-            $rowModel = (isset($options['model']) && $options['model']) ? $options['model'] : new Row();
+            $multipleRows = isset($options['multipleRows']) ? $options['multipleRows']
+                        : false;
+            $rowModel = (isset($options['model']) && $options['model']) ? $options['model']
+                        : new Row();
             $retIds = (isset($options['lastInsertIds'])) ?
                     $options['lastInsertIds'] : false;
 
-            if (!$multipleRows && $values !== null) {
-                $_values[] = $values;
-                $values = $_values;
-            }
+            if (!$multipleRows && $values !== null) $values = array($values);
             $stmt = $this->prepare($query);
 
             $return = array();
             if ($values) {
                 foreach ($values as $vals) {
                     $res = $stmt->execute($vals);
-                    $this->createReturn($query, $retIds, $stmt, $res, $return, $vals);
+                    $this->createReturn($query, $retIds, $stmt, $res, $return,
+                            $vals);
                 }
             }
             else {
@@ -522,7 +515,8 @@ class Connection extends \PDO {
         }
     }
 
-    private function createReturn($query, $retIds, $stmt, $res, &$return, $vals = array()) {
+    private function createReturn($query, $retIds, $stmt, $res, &$return,
+            $vals = array()) {
         if (strtolower(substr(ltrim($query), 0, 6)) === 'insert' && $retIds) {
             $return[] = $this->lastInsertId();
         }

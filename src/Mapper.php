@@ -15,6 +15,7 @@ use DBScribe\ArrayCollection,
  * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
 abstract class Mapper extends Row {
+    const ARRAY_COLLECTION_SEPARATOR = '__:DS:__';
 
     private $settings;
 
@@ -33,11 +34,10 @@ abstract class Mapper extends Row {
         $className = str_replace('\\', '.', get_called_class());
         $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . $className;
         $save = false;
-        $this->getAnnotations();
 
         @session_start();
         if (@$_SESSION['mapperSave'] && !is_readable($path)) {
-            $this->save($path, $this->getAnnotations());
+            $this->save($path, $this->getClassSettings());
             unset($_SESSION['mapperSave']);
         }
 
@@ -45,23 +45,20 @@ abstract class Mapper extends Row {
             $save = $this->createTable($table);
         }
         else {
-            $this->checkModelRequirements($path);
+            $this->checkModelRequirements();
             $save = $this->isUpToDate($path, $table);
         }
 
         if ($save || !is_readable($path))
-            $this->save($path, $this->getAnnotations());
-        //session_write_close();
+            $this->save($path, $this->getClassSettings());
     }
 
     /**
      * Checks class annotations for requirements
-     * @param type $path
      */
-    private function checkModelRequirements($path) {
+    private function checkModelRequirements() {
         $reload = false;
-        $classAnnots = $this->annotations->getClass();
-
+        $classAnnots = $this->getAnnotations()->getClass();
         if (!empty($classAnnots[1]) && is_array($classAnnots[1])) {
             foreach ($classAnnots[1] as $desc) {
                 if (strtolower(substr($desc, 0, 4)) !== 'dbs\\')
@@ -184,6 +181,16 @@ abstract class Mapper extends Row {
         return $classPath;
     }
 
+    private function ignoreThis() {
+        $ignore = $this->getIgnore();
+        if (!in_array($this->getTableName(), $ignore)) {
+            $ignore[] = $this->getTableName();
+            @session_start();
+            $_SESSION['mapperIgnore'] = $ignore;
+        }
+        return $this;
+    }
+
     private function ignore() {
         if (in_array($this->getTableName(), $this->getIgnore())) {
             return true;
@@ -205,7 +212,7 @@ abstract class Mapper extends Row {
      * @return mixed
      */
     private function createTable(Table &$table) {
-        $annotations = $this->getAnnotations();
+        $annotations = $this->getClassSettings();
         $create = false;
         foreach ($annotations as $columnName => $descArray) {
             $create = true;
@@ -363,14 +370,11 @@ abstract class Mapper extends Row {
             $return = $this->prepareUpdate($path, $table);
         }
 
-        if (count($this->getSettings()) !== count($table->getColumns(true))) {
+        if (count($this->getCachedSettings()) !== count($table->getColumns(true))) {
             foreach ($this->getModelTable($this->getTableName()) as $class) {
                 unlink(DATA . 'mapper' . DIRECTORY_SEPARATOR . str_replace('\\', '.', $class));
             }
-            return $this->isUpToDate($path, $table);
-        }
-        if (!$this->ignore()) {
-            $this->updateReferences($table);
+//            return $this->isUpToDate($path, $table);
         }
         return ($return === null) ? false : $return;
     }
@@ -380,6 +384,7 @@ abstract class Mapper extends Row {
      * @param Table $table
      */
     private function updateReferences(Table &$table) {
+        $this->ignoreThis();
         foreach ($table->getBackReferences() as $array) {
             foreach ($array as $ref) {
                 if (in_array($ref['refTable'], $this->getIgnore()))
@@ -405,7 +410,7 @@ abstract class Mapper extends Row {
      * @return void
      */
     private function prepareUpdate($path, Table &$table) {
-        $newDesc = $this->getAnnotations(true);
+        $newDesc = $this->getClassSettings(true);
         // to indicate whether oldDesc directly from Table in DB
         $liveDesc = false;
 
@@ -505,6 +510,7 @@ abstract class Mapper extends Row {
      * @return mixed
      */
     private function updateTable(array $columns, Table &$table) {
+        $this->updateReferences($table);
         $canUpdate = false;
         foreach ($columns['remove'] as $columnName) {
             $canUpdate = true;
@@ -661,19 +667,19 @@ abstract class Mapper extends Row {
      */
     protected function _preCall(&$name, array &$args) {
         if (!method_exists($this, $name)) {
-            $settings = $this->getSettings($name);
-            if (array_key_exists('reference', $settings['attrs'])) {
+            $settings = $this->getCachedSettings($name);
+            if (array_key_exists('reference', $settings['attrs']) || $settings['type'] == 'ReferenceMany') {
                 $modelTable = array_key_exists('model', $settings['attrs']) ?
                         $settings['attrs']['model'] :
                         $settings['attrs']['reference']['model'];
-                $args['relateWhere'] = array();
                 $columnValue = is_object($this->$name) ? $this->$name->getArrayCopy() : $this->$name;
                 $nam = !is_array($columnValue) ? explode('__:DS:__', $columnValue) : $columnValue;
                 $column = array_key_exists('column', $settings['attrs']) ?
                         $settings['attrs']['column'] :
                         $settings['attrs']['reference']['column'];
+                $args['relateWhere'] = array();
                 foreach ($nam as $val) {
-                    $args['relateWhere'][] = array($column => $val);
+                        $args['relateWhere'][] = array($column => $val);
                 }
             }
             if ($modelTable || (!$modelTable && $modelTable = self::getModelTable(Util::camelTo_($name)))) {
@@ -682,11 +688,13 @@ abstract class Mapper extends Row {
                         new $modelTable;
 
                 $name = $model->getTableName();
-                $relTable = $this->getConnection()->table($name);
+                if (!isset($args[0]['returnType']) || $args[0]['returnType'] == Table::RETURN_MODEL){
+                    $relTable = $this->getConnection()->table($name);
 
-                $model->setConnection($this->getConnection());
-                $model->init($relTable);
-                $args['model'] = $model;
+                    $model->setConnection($this->getConnection());
+                    $model->init($relTable);
+                    $args['model'] = $model;
+                }
             }
         }
     }
@@ -791,19 +799,16 @@ abstract class Mapper extends Row {
      * @param string $property
      * @return mixed
      */
-    final public function getSettings($property = null) {
+    final public function getCachedSettings($property = null) {
         if ($this->settings === null) {
             $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . str_replace('\\', '.', get_called_class());
             $this->settings = include $path;
-//            $annots = new Annotation(get_called_class());
-//            $this->settings = $this->parseAnnotations($annots->getProperties(), false);
         }
 
-        if ($property === null)
-            return $this->settings;
-
-        if (isset($this->settings[$property]))
+        if (is_array($this->settings) && isset($this->settings[$property]))
             return $this->settings[$property];
+
+        return $this->settings;
     }
 
     private function checkModelExists($model) {
@@ -837,6 +842,7 @@ abstract class Mapper extends Row {
      * @todo allow referencing table with no model
      */
     private function createReference($property, array $annot, array $primary = array()) {
+        $this->ignoreThis();
         if (!isset($annot['attrs']['model']))
             throw new Exception('Attribute "model" not set for reference property "' .
             $property . '" of class "' . get_called_class() . '"');
@@ -875,7 +881,7 @@ abstract class Mapper extends Row {
                     $this->_table->getConnection()->alterTable($conTable);
                 }
             }
-            $attrs = $refTable->getSettings(\Util::_toCamel($annot['attrs']['property']));
+            $attrs = $refTable->getCachedSettings(\Util::_toCamel($annot['attrs']['property']));
             $conColumns = $conTable->getColumns();
         }
         if ($attrs === null)
@@ -966,7 +972,7 @@ abstract class Mapper extends Row {
      * Turns empty values to null
      */
     public function preSave() {
-        $this->getSettings();
+        $this->getCachedSettings();
         foreach ($this->toArray() as $ppt => $val) {
             $settingKey = \Util::_toCamel($ppt);
             if (@$this->settings[$settingKey]['type'] === 'ReferenceMany' && !empty($val)) {
@@ -1040,7 +1046,10 @@ abstract class Mapper extends Row {
         if (!empty($this->settings)) {
             foreach ($this->settings as $column => $descArray) {
                 if ($descArray['type'] === 'ReferenceMany') {
-                    $this->$column = new ArrayCollection(explode('__:DS:__', $this->$column));
+                    if (is_string($this->$column) && $newValue = json_decode($this->$column,  true))
+                            $this->$column = $newValue;
+                    $this->$column = new ArrayCollection($this->$column ?
+                            explode(self::ARRAY_COLLECTION_SEPARATOR, $this->$column): array());
                 }
             }
         }
@@ -1059,19 +1068,16 @@ abstract class Mapper extends Row {
      * @return array
      */
     private function getAnnotations($forceNew = false) {
-        $ignore = $this->getIgnore();
-        if (!in_array($this->getTableName(), $ignore)) {
-            $ignore[] = $this->getTableName();
-            @session_start();
-            $_SESSION['mapperIgnore'] = $ignore;
-        }
-
-        if ($this->settings === null || $this->annotations === null || $forceNew === true) {
+        if ($this->annotations === null || $forceNew === true) {
             $this->annotations = new Annotation(get_called_class());
-            $this->settings = $this->parseAnnotations($this->annotations->getProperties('DBS'), !$this->ignore());
         }
 
-        return $this->settings;
+        return $this->annotations;
+    }
+
+    private function getClassSettings($forceNew = false) {
+        return $this->parseAnnotations($this->getAnnotations($forceNew)
+                ->getProperties('DBS'), !$this->ignore());
     }
 
     /**
