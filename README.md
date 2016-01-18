@@ -29,4 +29,4 @@ There two ways to install DBScribe.
 USAGE EXAMPLES
 ==============
 
-<http://ezra-obiwale.github.io/DBScribe/ />
+[http://ezra-obiwale.github.io/DBScribe/] (http://ezra-obiwale.github.io/DBScribe/)
