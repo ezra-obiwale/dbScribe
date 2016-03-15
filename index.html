@@ -28,14 +28,14 @@
       </header>
       <section>
         <h1>
-<a id="pdo-abstraction" class="anchor" href="#pdo-abstraction" aria-hidden="true"><span class="octicon octicon-link"></span></a>PDO Abstraction</h1>
+<a id="pdo-abstraction" class="anchor" href="#pdo-abstraction" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>PDO Abstraction</h1>
 
 <hr>
 
 <p>This library can create your databases, tables and columns. It can further keep an eye on your models to see if any column needs to be updated. This constant monitoring is based on annotations.</p>
 
 <h2>
-<a id="general-uses" class="anchor" href="#general-uses" aria-hidden="true"><span class="octicon octicon-link"></span></a>General uses</h2>
+<a id="general-uses" class="anchor" href="#general-uses" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>General uses</h2>
 
 <p>Below is a table showing the general uses of each file:</p>
 
@@ -83,18 +83,19 @@
 </table>
 
 <h2>
-<a id="basic-usage" class="anchor" href="#basic-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic Usage</h2>
+<a id="basic-usage" class="anchor" href="#basic-usage" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Basic Usage</h2>
 
 <h3>
-<a id="connecting-to-a-database" class="anchor" href="#connecting-to-a-database" aria-hidden="true"><span class="octicon octicon-link"></span></a>Connecting to a database</h3>
+<a id="connecting-to-a-database" class="anchor" href="#connecting-to-a-database" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Connecting to a database</h3>
 
 <div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$connection</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Connection</span>(<span class="pl-s"><span class="pl-pds">'</span>mysql:host=localhost;dbname=test_db<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>db_user<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>db_user_password<span class="pl-pds">'</span></span>, <span class="pl-c1">array</span>(</span>
 <span class="pl-s1">        <span class="pl-s"><span class="pl-pds">'</span>tablePrefix<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>ds_<span class="pl-pds">'</span></span>, <span class="pl-c">// optional - Indicates the prefix to add to table names</span></span>
-<span class="pl-s1">        <span class="pl-s"><span class="pl-pds">'</span>create<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-c1">true</span>, <span class="pl-c">// optional - Indicates whether to create the database if it doesn't exist</span></span>
+<span class="pl-s1">        <span class="pl-s"><span class="pl-pds">'</span>create<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-c1">true</span>, <span class="pl-c">// optional - Indicates whether to create the database if it doesn't exist,</span></span>
+<span class="pl-s1">        <span class="pl-s"><span class="pl-pds">'</span>autoUpdate<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-c1">true</span>, <span class="pl-c">// optional - Indicates whether to auto update database tables from mapper class annotations</span></span>
 <span class="pl-s1">    ));</span></pre></div>
 
 <h3>
-<a id="connecting-to-a-table" class="anchor" href="#connecting-to-a-table" aria-hidden="true"><span class="octicon octicon-link"></span></a>Connecting to a table</h3>
+<a id="connecting-to-a-table" class="anchor" href="#connecting-to-a-table" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Connecting to a table</h3>
 
 <p>Example database table columns</p>
 
@@ -138,7 +139,7 @@
 <div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span> <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-c1">Table</span>(<span class="pl-s"><span class="pl-pds">'</span>user<span class="pl-pds">'</span></span>, <span class="pl-smi">$connection</span>); <span class="pl-c">// Note: Table name without prefix</span></span></pre></div>
 
 <h3>
-<a id="crud" class="anchor" href="#crud" aria-hidden="true"><span class="octicon octicon-link"></span></a>CRUD</h3>
+<a id="crud" class="anchor" href="#crud" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>CRUD</h3>
 
 <ul>
 <li><strong>Creating entries</strong></li>
@@ -186,10 +187,10 @@
 <div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>delete(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>)); <span class="pl-c">// deletes based on the columns provided in the rows</span></span></pre></div>
 
 <h2>
-<a id="advanced-usage" class="anchor" href="#advanced-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Advanced Usage</h2>
+<a id="advanced-usage" class="anchor" href="#advanced-usage" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Advanced Usage</h2>
 
 <h3>
-<a id="creating-models" class="anchor" href="#creating-models" aria-hidden="true"><span class="octicon octicon-link"></span></a>Creating Models</h3>
+<a id="creating-models" class="anchor" href="#creating-models" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Creating Models</h3>
 
 <div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-k">class</span> <span class="pl-en">User</span> <span class="pl-k">extends</span> <span class="pl-e">Mapper</span> {</span>
 <span class="pl-s1">        <span class="pl-c">/** @DBS\Int (primary=true,autoIncrement=true,size=2) **/</span></span>
