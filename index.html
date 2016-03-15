@@ -166,8 +166,8 @@
 <span class="pl-s1">        <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>),</span>
 <span class="pl-s1">    );</span>
 <span class="pl-s1">    <span class="pl-smi">$rows</span> <span class="pl-k">=</span> <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>select(<span class="pl-smi">$criteria</span>); <span class="pl-c">// Returns object ArrayCollection containing 2 Row objects</span></span>
-<span class="pl-s1">    <span class="pl-c">/* $tblUser-&gt;select($criteria, Table::RETURN_DEFAULT) returns an array of row arrays</span></span>
-<span class="pl-s1"><span class="pl-c">     * $tblUser-&gt;select($criteria, Table::RETURN_JSON) returns (You got it right) JSON objects */</span></span></pre></div>
+<span class="pl-s1">    <span class="pl-c">// $tblUser-&gt;select($criteria, Table::RETURN_DEFAULT) returns an array of row arrays</span></span>
+<span class="pl-s1">    <span class="pl-c">// $tblUser-&gt;select($criteria, Table::RETURN_JSON) returns (You got it right) JSON objects</span></span></pre></div>
 
 <ul>
 <li><strong>Updating entries</strong></li>
@@ -178,7 +178,7 @@
 <span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">firstName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>;</span>
 <span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">lastName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Asegun<span class="pl-pds">'</span></span>;</span>
 <span class="pl-s1"></span>
-<span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>update(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>), <span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span>); <span class="pl-c">// updates the rows where the first_name is as given in the rows to update</span></span></pre></div>
+<span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>update(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>), <span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span>); <span class="pl-c">// updates the rows where the first_name is as given in the column to update by</span></span></pre></div>
 
 <ul>
 <li><strong>Deleting entries</strong></li>
@@ -192,7 +192,7 @@
 <h3>
 <a id="creating-models" class="anchor" href="#creating-models" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Creating Models</h3>
 
-<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-k">class</span> <span class="pl-en">User</span> <span class="pl-k">extends</span> <span class="pl-e">Mapper</span> {</span>
+<div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-k">class</span> <span class="pl-en">User</span> <span class="pl-k">extends</span> <span class="pl-c1">DBScribe\</span><span class="pl-e">Mapper</span> {</span>
 <span class="pl-s1">        <span class="pl-c">/** @DBS\Int (primary=true,autoIncrement=true,size=2) **/</span></span>
 <span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$id</span>;</span>
 <span class="pl-s1">        <span class="pl-c">/** @DBS\String (size=20) **/</span></span>
