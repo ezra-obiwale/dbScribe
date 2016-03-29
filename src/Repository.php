@@ -13,29 +13,29 @@ use Exception;
 class Repository extends Table {
 
     private $isSelect;
-    private $alwaysJoin;
+    private $alwaysJoinOn;
 
     /**
      * Class constructor
-     * @param Mapper $table
+     * @param Mapper $model
      * @param Connection $connection
      * @param bool $delayExecution
      */
-    public function __construct(Mapper $table, Connection $connection = null,
+    public function __construct(Mapper $model, Connection $connection = null,
             $delayExecution = false) {
         if ($connection) {
-            $table->setConnection($connection);
+            $model->setConnection($connection);
         }
         else {
-            $connection = $table->getConnection();
+            $connection = $model->getConnection();
         }
         if (!$connection)
-                throw new Exception('Repository must have a valid connection: ' . $table->getTableName());
+                throw new Exception('Repository must have a valid connection: ' . $model->getTableName());
 
-        parent::__construct($table->getTableName(), $connection, $table);
-        $table->init($this);
+        parent::__construct($model->getTableName(), $connection, $model);
+        $model->init($this);
         if ($delayExecution) $this->delayExecute();
-        $this->alwaysJoin = array();
+        $this->alwaysJoinOn = array();
     }
 
     /**
@@ -158,20 +158,20 @@ class Repository extends Table {
     }
 
     /**
-     * Join with given table on every select
+     * Join the table attached with the given column on every select
      * @see Table::join()
-     * @param string $tableName
+     * @param string $columnName
      * @param array $options
      * @return Repository
      */
-    public function alwaysJoin($tableName, array $options = array()) {
-        $this->alwaysJoin[$tableName] = $options;
+    public function alwaysJoinOn($columnName, array $options = array()) {
+        $this->alwaysJoinOn[$columnName] = $options;
         return $this;
     }
 
-    private function insertJoins() {
-        foreach ($this->alwaysJoin as $tableName => $options) {
-            $this->join($tableName, $options);
+    private function insertJoinings() {
+        foreach ($this->alwaysJoinOn as $columnName => $options) {
+            $this->joinOn($columnName, $options);
         }
     }
 
@@ -183,7 +183,7 @@ class Repository extends Table {
      * @return Repository
      */
     public function select($model = array(), $returnType = Table::RETURN_MODEL) {
-        $this->insertJoins();
+        $this->insertJoinings();
         if (!is_array($model)) {
             $model = array($model);
         }
@@ -201,7 +201,6 @@ class Repository extends Table {
         if (!is_array($model)) {
             $model = array($model);
         }
-
         return parent::insert($model);
     }
 

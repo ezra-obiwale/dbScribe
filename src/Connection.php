@@ -51,7 +51,13 @@ class Connection extends \PDO {
      * @param string $dsn
      * @param string $username
      * @param string $password
-     * @param array $options
+     * @param array $options All \PDO constructor options and: <br />
+     * <br />
+     * - create (bool): Inidicates whether to create the database<br />
+     * - tablePrefix (string): The string to prefix all tables with<br />
+     * - autoUpdate (bool): Indicates whether to automatically update the
+     * tables and columns definitions based on the mapper classes. Requires
+     * mapper classes extending class Mapper
      */
     public function __construct($dsn, $username = null, $password = null,
             $options = array()) {
@@ -88,6 +94,14 @@ class Connection extends \PDO {
      */
     public function getTablePrefix() {
         return @$this->options['tablePrefix'];
+    }
+
+    /**
+     * Checks whether automatic update of model classes is allowed
+     * @return bool
+     */
+    public function canAutoUpdate() {
+        return (@$this->options['autoUpdate'] === TRUE);
     }
 
     /**
@@ -383,7 +397,7 @@ class Connection extends \PDO {
     }
 
     private function addNewColumns(array $columns, Table $table,
-            array $dropColumns) {
+            array $dropColumns = array()) {
         $qry = '';
         $cnt = 1;
         foreach ($columns as $column => $desc) {
@@ -463,25 +477,20 @@ class Connection extends \PDO {
      * @param array $options Keys include:
      *
      * 		"multipleRows" (boolean)	-	Indicates if values are for multiple rows<br />
-     * 		"model" (\Row)				-	The model to morph the results to
      * 		"lastInsertIds" (boolean)			-	Indicates whether to return last insert ids or not
      * @return mixed
      * @throws \Exception
-     * @todo use PDO::FETCH_INTO; PDO::FETCH_INTO repeats the last row many times over
      */
     public function doPrepare($query, array $values = null,
-            array $options = array(), $tb = null) {
+            array $options = array()) {
         try {
             $multipleRows = isset($options['multipleRows']) ? $options['multipleRows']
                         : false;
-            $rowModel = (isset($options['model']) && $options['model']) ? $options['model']
-                        : new Row();
             $retIds = (isset($options['lastInsertIds'])) ?
                     $options['lastInsertIds'] : false;
 
             if (!$multipleRows && $values !== null) $values = array($values);
             $stmt = $this->prepare($query);
-
             $return = array();
             if ($values) {
                 foreach ($values as $vals) {
@@ -496,7 +505,6 @@ class Connection extends \PDO {
             }
 
             if (strtolower(substr(ltrim($query), 0, 6)) === 'select') {
-                $rowModel->setConnection($this);
                 $return = $stmt->fetchAll(\PDO::FETCH_ASSOC);
                 return $return;
             }
@@ -520,10 +528,6 @@ class Connection extends \PDO {
         if (strtolower(substr(ltrim($query), 0, 6)) === 'insert' && $retIds) {
             $return[] = $this->lastInsertId();
         }
-//        elseif (strtolower(substr(ltrim($query), 0, 6)) === 'update' && !empty($vals)) {
-//            $v = array_values($vals);
-//            $return[$v[count($v) - 1]] = $stmt->rowCount();
-//        }
         else {
             $return[] = $res;
         }

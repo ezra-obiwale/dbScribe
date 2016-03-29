@@ -236,4 +236,12 @@ class ArrayCollection extends ArrayObject {
         return '<pre>' . print_r($this, true) . '</pre>';
     }
 
+    /**
+     * @see getArrayCopy()
+     * @return array
+     */
+    public function toArray() {
+        return $this->getArrayCopy();
+    }
+
 }

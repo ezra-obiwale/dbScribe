@@ -18,40 +18,47 @@ use DBScribe\ArrayCollection,
 abstract class Mapper extends Row {
     const ARRAY_COLLECTION_SEPARATOR = '__:DS:__';
 
-    private $settings;
-
     /**
      *
      * @var \DBScribe\Annotation
      */
-    private $annotations;
+    private $_annotations;
+    private $_settings;
 
     /**
      * Initialize the row
      * @param Table $table Live table connection
      */
     public function init(Table &$table) {
-        $this->_table = & $table;
+        $this->setTable($table);
+        @session_start();
+        if (!$this->getConnection()->canAutoUpdate()) {
+            unset($_SESSION['mapperIgnore']);
+//            session_write_close();
+            return false;
+        }
         $className = str_replace('\\', '.', get_called_class());
         $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . $className;
         $save = false;
 
-        @session_start();
         if (@$_SESSION['mapperSave'] && !is_readable($path)) {
             $this->save($path, $this->getClassSettings());
             unset($_SESSION['mapperSave']);
         }
 
-        if (!$this->tableExists($table)) {
-            $save = $this->createTable($table);
+        if (!$this->tableExists()) {
+            $save = $this->createTable();
         }
         else {
             $this->checkModelRequirements();
-            $save = $this->isUpToDate($path, $table);
+            $save = $this->isUpToDate($path);
         }
 
         if ($save || !is_readable($path))
             $this->save($path, $this->getClassSettings());
+
+        $this->ignoreThis();
+       // session_write_close();
     }
 
     /**
@@ -70,7 +77,6 @@ abstract class Mapper extends Row {
         }
 
         if ($reload) {
-            @session_start();
             $_SESSION['mapperSave'] = true;
             header('Location: //' . $_SERVER['SERVER_NAME'] . $_SERVER['REQUEST_URI']);
             exit;
@@ -106,7 +112,7 @@ abstract class Mapper extends Row {
         ob_start();
         $classPath = $this->openClassForWriting();
         $methods = '';
-        foreach ($this->_table->getColumns() as $name => $attrsRow) {
+        foreach ($this->getTable()->getColumns() as $name => $attrsRow) {
             if (in_array(Util::camelTo_($name), $ignore))
                 continue;
             echo "\r\n";
@@ -133,7 +139,7 @@ abstract class Mapper extends Row {
     }
 
     private function fetchColumnProperties($attrsRow) {
-        $references = $this->_table->getReferences();
+        $references = $this->getTable()->getReferences();
         if ($references[$attrsRow['colName']] && !empty($references[$attrsRow['colName']]['refColumn'])) {
             $ref = $references[$attrsRow['colName']];
             $modelTable = $this->getModelTable($attrsRow['colName']);
@@ -186,7 +192,6 @@ abstract class Mapper extends Row {
         $ignore = $this->getIgnore();
         if (!in_array($this->getTableName(), $ignore)) {
             $ignore[] = $this->getTableName();
-            @session_start();
             $_SESSION['mapperIgnore'] = $ignore;
         }
         return $this;
@@ -200,19 +205,17 @@ abstract class Mapper extends Row {
 
     /**
      * Checks if the table exists
-     * @param Table $table
      * @return boolean
      */
-    private function tableExists(Table &$table) {
-        return (count($table->getColumns()) > 0);
+    private function tableExists() {
+        return (count($this->getTable()->getColumns()) > 0);
     }
 
     /**
      * Creates table in the database from the model's annotations
-     * @param Table $table
      * @return mixed
      */
-    private function createTable(Table &$table) {
+    private function createTable() {
         $annotations = $this->getClassSettings();
         $create = false;
         foreach ($annotations as $columnName => $descArray) {
@@ -220,7 +223,7 @@ abstract class Mapper extends Row {
             $dbColumnName = Util::camelTo_($columnName);
 
             if (isset($descArray['attrs']['primary']) && $descArray['attrs']['primary']) {
-                $table->setPrimaryKey($dbColumnName);
+                $this->getTable()->setPrimaryKey($dbColumnName);
             }
 
             if (isset($descArray['attrs']['reference'])) { // Reference not ReferenceMany
@@ -228,9 +231,9 @@ abstract class Mapper extends Row {
                         $descArray['attrs']['reference']['onDelete'] : 'RESTRICT';
                 $onUpdate = (isset($descArray['attrs']['reference']['onUpdate'])) ?
                         $descArray['attrs']['reference']['onUpdate'] : 'RESTRICT';
-                $table->addReference($dbColumnName, $descArray['attrs']['reference']['table'], $descArray['attrs']['reference']['column'], $onDelete, $onUpdate);
+                $this->getTable()->addReference($dbColumnName, $descArray['attrs']['reference']['table'], $descArray['attrs']['reference']['column'], $onDelete, $onUpdate);
 
-                $refTable = new Table($descArray['attrs']['reference']['table'], $table->getConnection());
+                $refTable = new Table($descArray['attrs']['reference']['table'], $this->getConnection());
                 $refColumns = $refTable->getColumns();
                 if (!empty($refColumns[$descArray['attrs']['reference']['column']]['charset'])) {
                     $descArray['attrs']['charset'] = $refColumns[$descArray['attrs']['reference']['column']]['charset'];
@@ -252,11 +255,11 @@ abstract class Mapper extends Row {
                 }
             }
 
-            $table->addColumn($dbColumnName, $this->parseAttributes($columnName, $descArray));
-            $this->checkIndexes($dbColumnName, $descArray, $table);
+            $this->getTable()->addColumn($dbColumnName, $this->parseAttributes($columnName, $descArray));
+            $this->checkIndexes($dbColumnName, $descArray, $this->getTable());
         }
 
-        return ($create) ? $table->getConnection()->createTable($table, false) : false;
+        return ($create) ? $this->getConnection()->createTable($this->getTable(), false) : false;
     }
 
     /**
@@ -340,10 +343,9 @@ abstract class Mapper extends Row {
     /**
      * Checks if the table is uptodate with the mapper settings
      * @param string $path Path to save the schema to
-     * @param Table $table
      * @return boolean
      */
-    private function isUpToDate($path, Table &$table) {
+    private function isUpToDate($path) {
         $classPath = $this->getClassPath(get_called_class());
         $return = null;
         // update if any parent is changed
@@ -359,46 +361,46 @@ abstract class Mapper extends Row {
 
             $parentPath = $this->getClassPath($parent);
             if (!is_readable($path) ||
-                    (is_readable($path) && is_readable($parentPath) && filemtime($classPath) < filemtime($parentPath))) {
-                $return = $this->prepareUpdate($path, $table);
+                    (is_readable($path) && is_readable($parentPath)
+                    && filemtime($classPath) < filemtime($parentPath))) {
+                    $return = $this->prepareUpdate($path);
                 break;
             }
         }
 
         if ($return === null && (!is_readable($path) ||
                 (is_readable($path) &&
-                @filemtime($path) < @filemtime(MODULES . str_replace('\\', '/', get_called_class()) . '.php')))) {
-            $return = $this->prepareUpdate($path, $table);
+                @filemtime($path) < @filemtime(MODULES .
+                        str_replace('\\', '/', get_called_class()) . '.php')))) {
+                $return = $this->prepareUpdate($path);
         }
 
-        if (count($this->getCachedSettings()) !== count($table->getColumns(true))) {
+        if (count($this->getCachedSettings()) !== count($this->getTable()->getColumns(true))) {
             foreach ($this->getModelTable($this->getTableName()) as $class) {
                 unlink(DATA . 'mapper' . DIRECTORY_SEPARATOR . str_replace('\\', '.', $class));
             }
-//            return $this->isUpToDate($path, $table);
         }
         return ($return === null) ? false : $return;
     }
 
     /**
      * Updates tables that reference current table
-     * @param Table $table
      */
-    private function updateReferences(Table &$table) {
+    private function updateReferences() {
         $this->ignoreThis();
-        foreach ($table->getBackReferences() as $array) {
+        foreach ($this->getTable()->getBackReferences() as $array) {
             foreach ($array as $ref) {
                 if (in_array($ref['refTable'], $this->getIgnore()))
                     continue;
 
-                $refTable = new Table($ref['refTable'], $table->getConnection());
+                $refTable = new Table($ref['refTable'], $this->getConnection());
                 $modelClass = self::getModelTable($ref['refTable']);
                 if (!empty($modelClass)) {
                     $mapper = is_array($modelClass) ?
                             new $modelClass[count($modelClass) - 1] :
                             new $modelClass;
-                    $mapper->setConnection($table->getConnection());
-                    $mapper->init($refTable, $this->getIgnore());
+                    $mapper->setConnection($this->getConnection());
+                    $mapper->init($refTable);
                 }
             }
         }
@@ -407,10 +409,9 @@ abstract class Mapper extends Row {
     /**
      * Prepares to update the table with the settings in the mapper class
      * @param string $path Pathh to save the schema to
-     * @param Table $table
      * @return void
      */
-    private function prepareUpdate($path, Table &$table) {
+    private function prepareUpdate($path) {
         $newDesc = $this->getClassSettings(true);
         // to indicate whether oldDesc directly from Table in DB
         $liveDesc = false;
@@ -420,9 +421,9 @@ abstract class Mapper extends Row {
         }
         else {
             $oldDesc = array();
-            if ($table->exists()) {
+            if ($this->getTable()->exists()) {
                 $liveDesc = true;
-                foreach ($table->getColumns() as $columnName => $info) {
+                foreach ($this->getTable()->getColumns() as $columnName => $info) {
                     $columnName = Util::_toCamel($columnName);
                     $type = ucfirst(preg_filter('/[^a-zA-Z]/', '', $info['colType']));
                     $size = preg_filter('/[^0-9]/', '', $info['colType']);
@@ -446,7 +447,7 @@ abstract class Mapper extends Row {
                     if (strtolower($type) !== 'boolean')
                         $oldDesc[$columnName]['attrs']['size'] = $size;
 
-                    if ($info['nullable'] == 'Yes')
+                    if ($info['nullable'] == 'true')
                         $oldDesc[$columnName]['attrs']['nullable'] = 'true';
                     else if (array_key_exists($columnName, $newDesc) && @$newDesc[$columnName]['attrs']['nullable'] == 'false') {
                         $oldDesc[$columnName]['attrs']['nullable'] = 'false';
@@ -501,35 +502,34 @@ abstract class Mapper extends Row {
             return Util::camelTo_($ppt);
         }, array_keys($oldDesc));
 
-        return $this->updateTable($toDo, $table);
+        return $this->updateTable($toDo);
     }
 
     /**
      * Updates the table
      * @param array $columns
-     * @param Table $table
      * @return mixed
      */
-    private function updateTable(array $columns, Table &$table) {
-        $this->updateReferences($table);
+    private function updateTable(array $columns) {
+        $this->updateReferences();
         $canUpdate = false;
         foreach ($columns['remove'] as $columnName) {
             $canUpdate = true;
-            $table->dropColumn(Util::camelTo_($columnName));
+            $this->getTable()->dropColumn(Util::camelTo_($columnName));
         }
 
         foreach ($columns['update'] as $columnName => &$desc) {
             $canUpdate = true;
             $dbColumnName = Util::camelTo_($columnName);
 
-            $this->checkIndexes($dbColumnName, $desc, $table);
+            $this->checkIndexes($dbColumnName, $desc, $this->getTable());
 
             if (isset($desc['attrs']['reference'])) {
                 $onDelete = (isset($desc['attrs']['reference']['onDelete'])) ?
                         $desc['attrs']['reference']['onDelete'] : 'RESTRICT';
                 $onUpdate = (isset($desc['attrs']['reference']['onUpdate'])) ?
                         $desc['attrs']['reference']['onUpdate'] : 'RESTRICT';
-                $table->alterReference($dbColumnName, $desc['attrs']['reference']['table'], $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
+                $this->getTable()->alterReference($dbColumnName, $desc['attrs']['reference']['table'], $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
                 unset($desc['attrs']['reference']['table']);
                 unset($desc['attrs']['reference']['column']);
                 unset($desc['attrs']['reference']['model']);
@@ -545,10 +545,10 @@ abstract class Mapper extends Row {
                 }
             }
 
-            $table->alterColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
+            $this->getTable()->alterColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
 
             if (isset($desc['attrs']['primary']) && $desc['attrs']['primary'])
-                $table->setPrimaryKey($dbColumnName);
+                $this->getTable()->setPrimaryKey($dbColumnName);
         }
 
         foreach ($columns['new'] as $columnName => $desc) {
@@ -560,7 +560,7 @@ abstract class Mapper extends Row {
                         $desc['attrs']['reference']['onDelete'] : 'RESTRICT';
                 $onUpdate = (isset($desc['attrs']['reference']['onUpdate'])) ?
                         $desc['attrs']['reference']['onUpdate'] : 'RESTRICT';
-                $table->addReference($dbColumnName, $desc['attrs']['reference']['table'], $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
+                $this->getTable()->addReference($dbColumnName, $desc['attrs']['reference']['table'], $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
                 unset($desc['attrs']['reference']['table']);
                 unset($desc['attrs']['reference']['column']);
                 unset($desc['attrs']['reference']['model']);
@@ -576,32 +576,32 @@ abstract class Mapper extends Row {
                 }
             }
 
-            $table->addColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
+            $this->getTable()->addColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
 
-            $this->checkIndexes($dbColumnName, $desc, $table);
+            $this->checkIndexes($dbColumnName, $desc, $this->getTable());
 
             if (isset($desc['attrs']['primary']) && $desc['attrs']['primary'])
-                $table->setPrimaryKey($dbColumnName);
+                $this->getTable()->setPrimaryKey($dbColumnName);
         }
 
         if ($canUpdate) {
             $droppedRefs = array();
-            foreach ($table->getBackReferences() as $refArray) {
+            foreach ($this->getTable()->getBackReferences() as $refArray) {
                 foreach ($refArray as $ref) {
-                    $refTable = new Table($ref['refTable'], $table->getConnection());
+                    $refTable = new Table($ref['refTable'], $this->getConnection());
                     foreach ($refTable->getReferences() as $col => $array) {
-                        if ($refTable->getName() !== $table->getName() && $array['refTable'] === $table->getName()) {
+                        if ($refTable->getName() !== $this->getTable()->getName() && $array['refTable'] === $this->getTable()->getName()) {
                             $refTable->dropReference($col);
                             $droppedRefs[$col][] = array_merge(array(
                                 'table' => $refTable,
                                     ), $array);
 
-                            $table->getConnection()->alterTable($refTable);
+                            $this->getConnection()->alterTable($refTable);
                         }
                     }
                 }
             }
-            $return = $table->getConnection()->alterTable($table);
+            $return = $this->getConnection()->alterTable($this->getTable());
 
             foreach ($droppedRefs as $col => $array) {
                 foreach ($array as $ref) {
@@ -609,11 +609,11 @@ abstract class Mapper extends Row {
                     $onUpdate = (!empty($ref['onUpdate'])) ? $ref['onUpdate'] : 'RESTRICT';
                     $ref['table']->addReference($col, $ref['refTable'], $ref['refColumn'], $onDelete, $onUpdate);
 
-                    $table->getConnection()->alterTable($ref['table']);
+                    $this->getConnection()->alterTable($ref['table']);
                 }
             }
             if ($return) {
-                $table->getConnection()->flush();
+                $this->getConnection()->flush();
                 return true;
             }
         }
@@ -625,38 +625,37 @@ abstract class Mapper extends Row {
      * Checks if a column should be indexed, removing old index and adding new
      * @param string $dbColumnName
      * @param array $desc
-     * @param Table $table
      * @return void
      */
-    private function checkIndexes($dbColumnName, array $desc, Table &$table) {
+    private function checkIndexes($dbColumnName, array $desc) {
         // if column is not primary key
-        if ($table->getPrimaryKey() !== $dbColumnName) {
+        if ($this->getTable()->getPrimaryKey() !== $dbColumnName) {
             // drop index if column is indexed
-            if (array_key_exists($dbColumnName, $table->getIndexes())) {
+            if (array_key_exists($dbColumnName, $this->getTable()->getIndexes())) {
                 // drop reference if column is referenced
-                if (array_key_exists($dbColumnName, $table->getReferences())) {
-                    $table->dropReference($dbColumnName);
+                if (array_key_exists($dbColumnName, $this->getTable()->getReferences())) {
+                    $this->getTable()->dropReference($dbColumnName);
                 }
-                $table->dropIndex($dbColumnName);
+                $this->getTable()->dropIndex($dbColumnName);
             }
 
             // add index to column if described as such
             if (isset($desc['attrs']['index'])) {
-                $table->addIndex($dbColumnName, Table::INDEX_REGULAR);
+                $this->getTable()->addIndex($dbColumnName, Table::INDEX_REGULAR);
             }
             else if (isset($desc['attrs']['unique'])) {
-                $table->addIndex($dbColumnName, Table::INDEX_UNIQUE);
+                $this->getTable()->addIndex($dbColumnName, Table::INDEX_UNIQUE);
             }
             else if (isset($desc['attrs']['fulltext'])) {
-                $table->addIndex($dbColumnName, Table::INDEX_FULLTEXT);
+                $this->getTable()->addIndex($dbColumnName, Table::INDEX_FULLTEXT);
             }
             else {
                 return null;
             }
 
-            $ref = $table->getReferences();
+            $ref = $this->getTable()->getReferences();
             if (array_key_exists($dbColumnName, $ref) && !empty($ref[$dbColumnName]['refTable'])) {
-                $table->addReference($dbColumnName, $ref[$dbColumnName]['refTable'], $ref[$dbColumnName]['refColumn'], $ref[$dbColumnName]['onDelete'], $ref[$dbColumnName]['onUpdate']);
+                $this->getTable()->addReference($dbColumnName, $ref[$dbColumnName]['refTable'], $ref[$dbColumnName]['refColumn'], $ref[$dbColumnName]['onDelete'], $ref[$dbColumnName]['onUpdate']);
             }
         }
     }
@@ -705,7 +704,7 @@ abstract class Mapper extends Row {
      * @param array $annotations
      * @return array
      */
-    private function parseAnnotations(array $annotations, $createReference = true) {
+    private function parseAnnotations(array $annotations) {
         $return = $defer = $primary = array();
         $first = $prev = null;
         foreach ($annotations as $property => $annotArray) {
@@ -744,7 +743,7 @@ abstract class Mapper extends Row {
         }
 
         foreach ($defer as $property => &$desc) {
-            $desc = $this->parseForReference($property, $desc, $primary, $createReference);
+            $desc = $this->parseForReference($property, $desc, $primary);
             if ($desc['attrs']['first'] && !$return[$property]['attrs']['first'])
                 unset($desc['attrs']['first']);
             if ($return[$property]['attrs']['after'])
@@ -760,8 +759,8 @@ abstract class Mapper extends Row {
         return array_merge($f, $return, $defer);
     }
 
-    private function parseForReference($property, $oDesc, $primary, $createReference) {
-        $desc = $this->createReference($property, $oDesc, $primary, $createReference);
+    private function parseForReference($property, $oDesc, $primary) {
+        $desc = $this->createReference($property, $oDesc, $primary);
         if (strtolower($oDesc['type']) === 'referencemany') {
             $desc['attrs'] = array_merge($oDesc['attrs'], $desc['attrs']['reference']);
 
@@ -801,15 +800,15 @@ abstract class Mapper extends Row {
      * @return mixed
      */
     final public function getCachedSettings($property = null) {
-        if ($this->settings === null) {
+        if ($this->_settings === null) {
             $path = DATA . 'mapper' . DIRECTORY_SEPARATOR . str_replace('\\', '.', get_called_class());
-            $this->settings = include $path;
+            $this->_settings = include $path;
         }
 
-        if (is_array($this->settings) && isset($this->settings[$property]))
-            return $this->settings[$property];
+        if (is_array($this->_settings) && isset($this->_settings[$property]))
+            return $this->_settings[$property];
 
-        return $this->settings;
+        return $this->_settings;
     }
 
     private function checkModelExists($model) {
@@ -857,14 +856,14 @@ abstract class Mapper extends Row {
 
         $refTable = new $annot['attrs']['model'];
 
-        if ($this->getConnection()->getTablePrefix() . $refTable->getTableName() === $this->_table->getName() && !empty($primary['column'])) {
+        if ($this->getConnection()->getTablePrefix() . $refTable->getTableName() === $this->getTable()->getName() && !empty($primary['column'])) {
             $annot['attrs']['property'] = Util::camelTo_($primary['column']);
             $attrs = $primary['desc'];
-            $conColumns = $this->_table->getColumns();
+            $conColumns = $this->getTable()->getColumns();
         }
         else {
-            $refTable->setConnection($this->_table->getConnection());
-            $conTable = $this->_table->getConnection()->table($refTable->getTableName(), $refTable);
+            $refTable->setConnection($this->getConnection());
+            $conTable = $this->getConnection()->table($refTable->getTableName(), $refTable);
             $refTable->init($conTable);
             if (!isset($annot['attrs']['property'])) {
                 if (!$conTable->getPrimaryKey())
@@ -879,7 +878,7 @@ abstract class Mapper extends Row {
             if (!array_key_exists($annot['attrs']['property'], $conTable->getIndexes())) {
                 $conTable->addIndex($annot['attrs']['property']);
                 if ($conTable->exists()) {
-                    $this->_table->getConnection()->alterTable($conTable);
+                    $this->getConnection()->alterTable($conTable);
                 }
             }
             $attrs = $refTable->getCachedSettings(\Util::_toCamel($annot['attrs']['property']));
@@ -976,7 +975,7 @@ abstract class Mapper extends Row {
         $this->getCachedSettings();
         foreach ($this->toArray() as $ppt => $val) {
             $settingKey = \Util::_toCamel($ppt);
-            if (@$this->settings[$settingKey]['type'] === 'ReferenceMany' && !empty($val)) {
+            if (@$this->_settings[$settingKey]['type'] === 'ReferenceMany' && !empty($val)) {
                 if (is_object($val) && is_a($val, 'DBScribe\ArrayCollection')) {
                     $val = $val->getArrayCopy();
                 }
@@ -1009,15 +1008,15 @@ abstract class Mapper extends Row {
                     $val = $this->$settingKey;
                 }
             }
-            else if (strtolower(@$this->settings[$settingKey]['type']) === 'date' && !empty($val) && !strstr($val, '0000')) {
+            else if (strtolower(@$this->_settings[$settingKey]['type']) === 'date' && !empty($val) && !strstr($val, '0000')) {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d');
                 $val = $this->$settingKey;
             }
-            elseif (strtolower(@$this->settings[$settingKey]['type']) === 'time' && !empty($val) && !strstr($val, '0000')) {
+            elseif (strtolower(@$this->_settings[$settingKey]['type']) === 'time' && !empty($val) && !strstr($val, '0000')) {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'H:i');
                 $val = $this->$settingKey;
             }
-            elseif (strtolower(@$this->settings[$settingKey]['type']) === 'timestamp' && !empty($val) && !strstr($val, '0000')) {
+            elseif (strtolower(@$this->_settings[$settingKey]['type']) === 'timestamp' && !empty($val) && !strstr($val, '0000')) {
                 $this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d H:i:s');
                 $val = $this->$settingKey;
             }
@@ -1029,9 +1028,9 @@ abstract class Mapper extends Row {
             }
         }
 
-        if (!$this->getConnection() && $this->_table) {
-            $this->setConnection($this->_table->getConnection());
-            $table = $this->_table->getConnection()->table($this->getTableName());
+        if (!$this->getConnection() && $this->getTable()) {
+            $this->setConnection($this->getTable()->getConnection());
+            $table = $this->getConnection()->table($this->getTableName());
             $this->init($table);
         }
 
@@ -1044,8 +1043,9 @@ abstract class Mapper extends Row {
      * Straightens out ReferenceMany into ArrayCollection
      */
     public function postFetch($property = null) {
-        if (!empty($this->settings)) {
-            foreach ($this->settings as $column => $descArray) {
+        $this->getCachedSettings();
+        if (!empty($this->_settings)) {
+            foreach ($this->_settings as $column => $descArray) {
                 if ($descArray['type'] === 'ReferenceMany') {
                     if (is_string($this->$column) && $newValue = json_decode($this->$column,  true))
                             $this->$column = $newValue;
@@ -1059,7 +1059,6 @@ abstract class Mapper extends Row {
     }
 
     private function getIgnore() {
-        @session_start();
         return is_array($_SESSION['mapperIgnore']) ? $_SESSION['mapperIgnore'] : array();
     }
 
@@ -1069,16 +1068,16 @@ abstract class Mapper extends Row {
      * @return array
      */
     private function getAnnotations($forceNew = false) {
-        if ($this->annotations === null || $forceNew === true) {
-            $this->annotations = new Annotation(get_called_class());
+        if ($this->_annotations === null || $forceNew === true) {
+            $this->_annotations = new Annotation(get_called_class());
         }
 
-        return $this->annotations;
+        return $this->_annotations;
     }
 
     private function getClassSettings($forceNew = false) {
         return $this->parseAnnotations($this->getAnnotations($forceNew)
-                ->getProperties('DBS'), !$this->ignore());
+                ->getProperties('DBS'));
     }
 
     /**
@@ -1106,10 +1105,6 @@ abstract class Mapper extends Row {
         return get_called_class();
     }
 
-    final public function getTable() {
-        return $this->_table;
-    }
-
     /**
      * Fetches an array of properties and their values
      * @param boolean $withNull Indicates whether to return properties with null values too
@@ -1119,12 +1114,9 @@ abstract class Mapper extends Row {
      */
     public function toArray($withNull = false, $asIs = false) {
         $array = parent::toArray();
-        unset($array['_table']);
-
         if ($asIs) {
             return $array;
         }
-
         $return = array();
         foreach ($array as $name => $value) {
             if (($value === null && !$withNull)) {

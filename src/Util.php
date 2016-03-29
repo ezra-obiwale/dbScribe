@@ -15,7 +15,7 @@ class Util {
      */
     public static function createGUID() {
         if (function_exists('com_create_guid')) {
-            return substr(com_create_guid(),1,36);
+            return substr(com_create_guid(), 1, 36);
         }
         else {
             mt_srand((double) microtime() * 10000);
@@ -53,8 +53,7 @@ class Util {
      * @return string
      */
     public static function camelTo_($str) {
-        if (!is_string($str) || empty($str))
-            return '';
+        if (!is_string($str) || empty($str)) return '';
         $str[0] = strtolower($str[0]);
         $func = create_function('$c', 'return "_" . strtolower($c[1]);');
         return preg_replace_callback('/([A-Z])/', $func, $str);
@@ -66,8 +65,7 @@ class Util {
      * @return string
      */
     public static function _toCamel($str) {
-        if (!is_string($str))
-            return '';
+        if (!is_string($str)) return '';
         $func = create_function('$c', 'return strtoupper($c[1]);');
         return preg_replace_callback('/_([a-z])/', $func, $str);
     }
@@ -94,16 +92,15 @@ class Util {
             }
 
             if (is_array($value)) {
-                $return = array_merge_recursive($return, self::compressArray($value, $keys));
+                $return = array_merge_recursive($return,
+                        self::compressArray($value, $keys));
                 continue;
             }
 
             if (($keys && in_array($ky, $keys)) || !$keys) {
                 if (array_key_exists($ky, $return)) {
-                    if (is_array($return[$ky]))
-                        $return[$ky][] = $value;
-                    else
-                        $return[$ky] = array($return[$ky], $value);
+                    if (is_array($return[$ky])) $return[$ky][] = $value;
+                    else $return[$ky] = array($return[$ky], $value);
                 } else {
                     $return[$ky] = $value;
                 }
@@ -121,17 +118,20 @@ class Util {
      * the config file will be overwritten with the array
      * @return boolean
      */
-    public static function updateConfig($path, array $data = array(), $recursiveMerge = false, $configArray = null) {
+    public static function updateConfig($path, array $data = array(),
+            $recursiveMerge = false, $configArray = null) {
         if (is_null($configArray)) {
-            if (is_readable($path))
-                $configArray = include $path;
+            if (is_readable($path)) $configArray = include $path;
             else {
                 $configArray = array();
             }
         }
-        $config = ($recursiveMerge) ? array_replace_recursive($configArray, $data) : array_replace($configArray, $data);
+        $config = ($recursiveMerge) ? array_replace_recursive($configArray,
+                        $data) : array_replace($configArray, $data);
         $content = str_replace("=> \n", '=>', var_export($config, true));
-        return (file_put_contents($path, '<' . '?php' . "\r\n\treturn " . $content . ';') === FALSE) ? false : true;
+        return (file_put_contents($path,
+                        '<' . '?php' . "\r\n\treturn " . $content . ';') === FALSE)
+                    ? false : true;
     }
 
     /**
@@ -143,29 +143,24 @@ class Util {
      * @param bool $multiple Indicates whether to return all found arrays or just one - the first
      * @return array|null The array containing the expected value
      */
-    public static function searchArray(array $array, $value, $recursive = false, $key = array(), $multiple = false) {
-        if (!is_array($value))
-            $value = array($value);
-        if ($key !== null && !is_array($key))
-            $key = array($key);
-        else if ($key === null)
-            $key = array();
+    public static function searchArray(array $array, $value, $recursive = false,
+            $key = array(), $multiple = false) {
+        if (!is_array($value)) $value = array($value);
+        if ($key !== null && !is_array($key)) $key = array($key);
+        else if ($key === null) $key = array();
         $found = array();
         foreach ($array as $ky => $val) {
             if (is_array($val)) {
-                if (!$recursive)
-                    continue;
-                $ret = static::searchArray($val, $value, $recursive, $key, $multiple);
+                if (!$recursive) continue;
+                $ret = static::searchArray($val, $value, $recursive, $key,
+                                $multiple);
                 if (count($ret)) {
-                    if ($multiple)
-                        $found = array_merge($found, $ret);
-                    else
-                        return $ret;
+                    if ($multiple) $found = array_merge($found, $ret);
+                    else return $ret;
                 }
                 continue;
             }
-            if (count($key) && !in_array($ky, $key))
-                continue;
+            if (count($key) && !in_array($ky, $key)) continue;
 
             $keys = array_flip($key);
             if ($val === $value[$keys[$ky]]) {
@@ -173,12 +168,36 @@ class Util {
                     $k = ($multiple === true) ? 0 : $array[$multiple];
                     $found[$k] = $array;
                 }
-                else
-                    return $array;
+                else return $array;
             }
         }
 
         return $found;
+    }
+
+    /**
+     * Fetches the differences in the given arrays recursively
+     * @param array $array1 The first array
+     * @param array $array2 The second array
+     * @param bool $binary Indicates whether to compare the values binarywise or not
+     * @return array
+     */
+    public static function arrayDiff(array $array1, array $array2,
+            $binary = false) {
+        $diff = array();
+        foreach ($array2 as $key => $val) {
+            if (!array_key_exists($key, $array1)) {
+                $diff[$key] = $val;
+                continue;
+            }
+            else if (is_array($val) && count(self::arrayDiff($val, $array1[$key], $binary))) {
+                $diff[$key] = $val;
+            }
+            else if (($binary && $val !== $array1[$key])
+                    || (!$binary && $val != $array1[$key])) $diff[$key] = $val;
+            unset($array1[$key]);
+        }
+        return array_merge($diff, $array1);
     }
 
 }
