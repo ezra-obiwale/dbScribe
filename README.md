@@ -1,4 +1,4 @@
-DBScribe
+dbScribe
 ========
 
 PDO Abstraction Library to manage CRUD functions from within PHP with the ability to create databases, tables and columns, and to keep them up-to-date according to models.
@@ -14,7 +14,7 @@ FEATURES
 INSTALLATION
 ============
 
-There two ways to install DBScribe.
+There two ways to install dbScribe.
 
 1. COMPOSER (Recommended)
    "require": {
@@ -23,10 +23,10 @@ There two ways to install DBScribe.
    
 2. MANUAL
    - Create "d-scribe/db-scribe" directory in your vendor directory
-   - Copy the files of DBScribe into that directory
+   - Copy the files of dbScribe into that directory
 
 
 USAGE EXAMPLES
 ==============
 
-[http://ezra-obiwale.github.io/DBScribe/] (http://ezra-obiwale.github.io/DBScribe/)
+[http://ezra-obiwale.github.io/dbScribe/] (http://ezra-obiwale.github.io/dbScribe/)

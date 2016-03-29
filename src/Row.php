@@ -1,6 +1,6 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
 /**
  * This is a typical row in the database table where the properties are the
@@ -15,7 +15,7 @@ class Row implements \JsonSerializable {
 
     /**
      *
-     * @var \DBScribe\Table
+     * @var \dbScribe\Table
      */
     private $_table;
 
@@ -28,7 +28,7 @@ class Row implements \JsonSerializable {
     /**
      * Sets the name of the table to attach model to
      * @param string $tableName
-     * @return \DBScribe\Row
+     * @return \dbScribe\Row
      */
     final public function setTableName($tableName) {
 	$this->_tableName = $tableName;
@@ -49,7 +49,7 @@ class Row implements \JsonSerializable {
     /**
      * Populates the properties of the model from the given data
      * @param array $data
-     * @return \DBScribe\Row
+     * @return \dbScribe\Row
      */
     public function populate(array $data) {
 	foreach ($data as $property => $value) {
@@ -84,7 +84,7 @@ class Row implements \JsonSerializable {
      * Resets all properties of the model to null
      * @param array $contructorParameters Array of parameters to pass to model
      * constructor, if any.
-     * @return \DBScribe\Row
+     * @return \dbScribe\Row
      */
     final public function reset(array $contructorParameters = array()) {
 	foreach (array_keys($this->toArray()) as $ppt) {
@@ -100,8 +100,8 @@ class Row implements \JsonSerializable {
 
     /**
      * Sets the connection for the use within row
-     * @param \DBScribe\Connection $connection
-     * @return \DBScribe\Row
+     * @param \dbScribe\Connection $connection
+     * @return \dbScribe\Row
      */
     final public function setConnection(Connection $connection) {
 	$this->_connection = $connection;
@@ -124,7 +124,7 @@ class Row implements \JsonSerializable {
      * Replaces magic method __set() for children classes
      * @param string $property
      * @param mixed $value
-     * @return \DBScribe\Row
+     * @return \dbScribe\Row
      */
     protected function _set($property, $value) {
 	$this->{$property} = $value;
@@ -203,7 +203,7 @@ class Row implements \JsonSerializable {
 		    ->setExpectedResult(isset($args[0]['returnType']) ?
 				    $args[0]['returnType'] : Table::RETURN_MODEL);
 	    $return = $this->prepSelectRelTable($relTable, $args);
-	    if (is_object($return) && is_a($return, 'DBScribe\Table')) {
+	    if (is_object($return) && is_a($return, 'dbScribe\Table')) {
 		$return = $return->select();
 	    }
 	    if (is_bool($return)) {
@@ -224,9 +224,9 @@ class Row implements \JsonSerializable {
 
     /**
      * Prepares the related table for select, calling limit and orderBy if required
-     * @param \DBScribe\Table $relTable
+     * @param \dbScribe\Table $relTable
      * @param array $callArgs
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     private function prepSelectRelTable(Table &$relTable, array $callArgs) {
 	foreach ($callArgs[0] as $method => $args) {
@@ -242,7 +242,7 @@ class Row implements \JsonSerializable {
     /**
      * Fetches the model to use for the called related table from the call arguments
      * @param array $callArgs
-     * @return \DBScribe\Row | null
+     * @return \dbScribe\Row | null
      */
     private function getRelTableModel(array $callArgs) {
 	if (isset($callArgs['model']) && is_object($callArgs['model'])) {
@@ -281,7 +281,7 @@ class Row implements \JsonSerializable {
 			$row[$column] = $value;
 		    }
 		    else {
-			throw new \Exception('Related Table Call Error: Option where value must be an array of \DBScribe\Rows or array of columns to values');
+			throw new \Exception('Related Table Call Error: Option where value must be an array of \dbScribe\Rows or array of columns to values');
 		    }
 
 		    $where[] = $row;
@@ -299,7 +299,7 @@ class Row implements \JsonSerializable {
 
     /**
      * Fetches the connection object
-     * @return \DBScribe\Connection|null
+     * @return \dbScribe\Connection|null
      */
     final public function getConnection() {
 	return $this->_connection;
@@ -315,7 +315,7 @@ class Row implements \JsonSerializable {
     /**
      * This is called after inserts and updates and expects a return of the model id.
      * @param mixed $lastInsertId
-     * @param int $lastInsertId either DBScribe\Table::OP_INSERT or DBScribe\Table::OP_UPDATE
+     * @param int $lastInsertId either dbScribe\Table::OP_INSERT or dbScribe\Table::OP_UPDATE
      * @param mixed $result Result of the operation
      * @return mixed Id of the model
      */

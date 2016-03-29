@@ -1,12 +1,12 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
-use DBScribe\ArrayCollection,
-    DBScribe\Row,
-    DBScribe\Table,
-    DBScribe\Util,
-    DBScribe\Annotation,
+use dbScribe\ArrayCollection,
+    dbScribe\Row,
+    dbScribe\Table,
+    dbScribe\Util,
+    dbScribe\Annotation,
     Exception;
 
 /**
@@ -20,7 +20,7 @@ abstract class Mapper extends Row {
 
     /**
      *
-     * @var \DBScribe\Annotation
+     * @var \dbScribe\Annotation
      */
     private $_annotations;
     private $_settings;
@@ -87,7 +87,7 @@ abstract class Mapper extends Row {
         $setting = $this->parseSettings($desc, true);
         if (method_exists($this, $setting['type'])) {
             if (!$this->{$setting['type']}($setting['attrs']))
-                throw new Exception('DBScribe Class Upgrade "' . $setting['type'] . '" failed');
+                throw new Exception('dbScribe Class Upgrade "' . $setting['type'] . '" failed');
         }
     }
 
@@ -354,7 +354,12 @@ abstract class Mapper extends Row {
                 break;
 
             $parent = str_replace(array(
-                'DScribe', 'DBScribe', 'DSLive'
+                'dScribe', 'dbScribe', 'dsLive'
+                    ), array(
+                'd-scribe/core/src', 'd-scribe/db-scribe/src', 'd-scribe/ds-live/src'
+                    ), $parent);
+            $parent = str_replace(array(
+                'dScribe', 'dbScribe', 'dsLive'
                     ), array(
                 'd-scribe/core/src', 'd-scribe/db-scribe/src', 'd-scribe/ds-live/src'
                     ), $parent);
@@ -847,12 +852,9 @@ abstract class Mapper extends Row {
             throw new Exception('Attribute "model" not set for reference property "' .
             $property . '" of class "' . get_called_class() . '"');
 
-        if (!$annot['attrs']['model'] = $this->checkModelExists($annot['attrs']['model'])) {
+        if (!$annot['attrs']['model'] = $this->checkModelExists($annot['attrs']['model']))
             throw new Exception('Model "' . $annot['attrs']['model'] . '" of reference property "' . $property .
             '" does not exist in class "' . get_called_class() . '"');
-        }
-        elseif (!in_array('DScribe\Core\IModel', class_implements($annot['attrs']['model'])))
-            throw new Exception('Model "' . $annot['attrs']['model'] . '" must implement "DScribe\Core\IModel"');
 
         $refTable = new $annot['attrs']['model'];
 
@@ -976,7 +978,7 @@ abstract class Mapper extends Row {
         foreach ($this->toArray() as $ppt => $val) {
             $settingKey = \Util::_toCamel($ppt);
             if (@$this->_settings[$settingKey]['type'] === 'ReferenceMany' && !empty($val)) {
-                if (is_object($val) && is_a($val, 'DBScribe\ArrayCollection')) {
+                if (is_object($val) && is_a($val, 'dbScribe\ArrayCollection')) {
                     $val = $val->getArrayCopy();
                 }
 
@@ -985,7 +987,7 @@ abstract class Mapper extends Row {
                 $ids = '';
                 if (is_array($val)) {
                     foreach ($val as $vl) {
-                        if (is_object($vl) && is_a($vl, 'DBScribe\Row')) {
+                        if (is_object($vl) && is_a($vl, 'dbScribe\Row')) {
                             if (!isset($vl->id)) {
                                 throw new Exception('ReferenceMany requires that all objects must have an ID');
                             }
@@ -1121,7 +1123,7 @@ abstract class Mapper extends Row {
         foreach ($array as $name => $value) {
             if (($value === null && !$withNull)) {
                 continue;
-            } else if (is_object($value) && is_a($value, 'DBScribe\ArrayCollection'))
+            } else if (is_object($value) && is_a($value, 'dbScribe\ArrayCollection'))
                 $value = $value->getArrayCopy();
             $return[\Util::camelTo_($name)] = $value;
         }

@@ -1,6 +1,6 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
 /**
  * This is a utility class which has some beautiful methods that serve different

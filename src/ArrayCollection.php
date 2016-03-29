@@ -1,6 +1,6 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
 use ArrayObject;
 
@@ -86,7 +86,7 @@ class ArrayCollection extends ArrayObject {
     /**
      * Removes a value from the array collection
      * @param mixed $value
-     * @return \DBScribe\ArrayCollection
+     * @return \dbScribe\ArrayCollection
      */
     public function remove($value) {
         $oldCollection = $this->getArrayCopy();
@@ -107,7 +107,7 @@ class ArrayCollection extends ArrayObject {
     /**
      * Adds an element to the collection
      * @param mixed $value
-     * @return \DBScribe\ArrayCollection
+     * @return \dbScribe\ArrayCollection
      */
     public function add($value) {
         $this->append($value);
@@ -130,7 +130,7 @@ class ArrayCollection extends ArrayObject {
      * it is appended to the collection
      * @param int $index
      * @param mixed $newValue
-     * @return \DBScribe\ArrayCollection
+     * @return \dbScribe\ArrayCollection
      */
     public function set($index, $newValue) {
         if (!$this->offsetSet($index, $newValue)) {
@@ -143,7 +143,7 @@ class ArrayCollection extends ArrayObject {
     /**
      * Finds all elements that match the given value
      * @param mixed $value
-     * @return \DBScribe\ArrayCollection
+     * @return \dbScribe\ArrayCollection
      */
     public function find($value) {
         $return = new ArrayCollection();
@@ -171,7 +171,7 @@ class ArrayCollection extends ArrayObject {
      * @param string $method
      * @param mixed $value
      * @param array $methodArgs
-     * @return \DBScribe\ArrayCollection
+     * @return \dbScribe\ArrayCollection
      */
     public function findObjectsByMethod($method, $value, array $methodArgs = array()) {
         $return = new ArrayCollection();
@@ -204,7 +204,7 @@ class ArrayCollection extends ArrayObject {
      * Finds all objects that the given property has the given value
      * @param string $property
      * @param mixed $value
-     * @return \DBScribe\ArrayCollection
+     * @return \dbScribe\ArrayCollection
      */
     public function findObjects($property, $value) {
         $return = new ArrayCollection();

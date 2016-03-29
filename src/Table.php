@@ -1,6 +1,6 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
 use Exception;
 
@@ -189,7 +189,7 @@ class Table {
     protected $withModel;
 
     /**
-     * The class that extends \DBScribe\Row which to map results to
+     * The class that extends \dbScribe\Row which to map results to
      * @var Row
      */
     protected $rowModel;
@@ -343,7 +343,7 @@ class Table {
     /**
      * Indicates whether to preserve queries that change the table or not
      * @param bool $bool
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     public function preserveQueries($bool = true) {
 	$this->preserveQueries = $bool;
@@ -512,8 +512,8 @@ class Table {
     /**
      * Adds an index to a column
      * @param string $columnName
-     * @param string $type Should be one of \DBScribe\Table::INDEX_REGULAR,  \DBScribe\Table::INDEX_UNIQUE,
-     * or  \DBScribe\Table::INDEX_FULLTEXT
+     * @param string $type Should be one of \dbScribe\Table::INDEX_REGULAR,  \dbScribe\Table::INDEX_UNIQUE,
+     * or  \dbScribe\Table::INDEX_FULLTEXT
      * @return Table
      */
     public function addIndex($columnName, $type = Table::INDEX_REGULAR) {
@@ -848,7 +848,7 @@ class Table {
     /**
      * Inserts the given row(s) into the table<br />
      * Many rows can be inserted at once.
-     * @param array $values Array with values \DBScribe\Row or array of [column => value]
+     * @param array $values Array with values \dbScribe\Row or array of [column => value]
      * @return Table
      */
     public function insert(array $values) {
@@ -995,7 +995,7 @@ class Table {
      * Selects the given columns from rows with the given criteria
      * Many rows can be passed in as criteria
      * @param array|string $columns Array or comma-separated string of columns
-     * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
+     * @param array $criteria Array with values \dbScribe\Row or array of [column => value]
      * @param int $return Indicates the type of result expected
      * @return Table|ArrayCollection
      */
@@ -1008,7 +1008,7 @@ class Table {
     /**
      * Selects rows from database
      * Many rows can be passed in as criteria
-     * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
+     * @param array $criteria Array with values \dbScribe\Row or array of [column => value]
      * @param int $return Indicates the type of result expected
      * @return Table|ArrayCollection
      */
@@ -1061,7 +1061,7 @@ class Table {
     /**
      * Determines whether to retrieve data from cache or not.
      * @param bool $bool
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     public function fromCache($bool = true) {
 	$this->fromCache = $bool;
@@ -1104,8 +1104,8 @@ class Table {
 
     /**
      * Sets the type of result expected
-     * @param int $expected One of \DBScribe\Table::RETURN_DEFAULT,
-     * \DBScribe\Table::RETURN_MODEL or \DBScribe\Table::RETURN_JSON
+     * @param int $expected One of \dbScribe\Table::RETURN_DEFAULT,
+     * \dbScribe\Table::RETURN_MODEL or \dbScribe\Table::RETURN_JSON
      * @param bool $checkNotSet Only set if not already
      * @return Table
      */
@@ -1188,7 +1188,7 @@ class Table {
      * Sets a column as the key to hold each result. Default is ID. This is only
      * valid if return type IS NOT MODEL
      * @param string $column
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     public function setResultKey($column) {
 	$this->resultKey = $column;
@@ -1463,7 +1463,7 @@ class Table {
     /**
      * Start grouping criteria with a parenthesis
      * @param boolean $logicalAnd
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     public function startGroup($logicalAnd = true) {
 	if ($this->where) $this->where .= ' ' . ($logicalAnd ? 'AND' : 'OR') . ' (';
@@ -1474,7 +1474,7 @@ class Table {
 
     /**
      * Ends the parenthesis group
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     public function endGroup() {
 	if ($this->where) $this->where .= ')';
@@ -1713,7 +1713,7 @@ class Table {
     }
 
     /**
-     * Checks if the row is a valid \DBScribe\Row row
+     * Checks if the row is a valid \dbScribe\Row row
      * @param array|object $row
      * @param boolean $preSave Indicates whether to call the presave function of the row
      * @throws Exception
@@ -1721,7 +1721,7 @@ class Table {
      */
     private function checkModel($row, $preSave = false) {
 	if (!is_array($row) && !is_object($row))
-		throw new Exception('Each element of param $where must be an object of, or one that extends, "DBScribe\Row", or an array of [column => value]: ' . print_r($row,
+		throw new Exception('Each element of param $where must be an object of, or one that extends, "dbScribe\Row", or an array of [column => value]: ' . print_r($row,
 																			     true));
 
 	if (empty($this->columns)) return array();
@@ -1729,7 +1729,7 @@ class Table {
 	if (is_array($row)) {
 	    return $row;
 	}
-	elseif (is_object($row) && get_class($row) === 'DBScribe\Row' || in_array('DBScribe\Row',
+	elseif (is_object($row) && get_class($row) === 'dbScribe\Row' || in_array('dbScribe\Row',
 									   class_parents($row))) {
 	    if ($preSave) {
 		$row->setConnection($this->connection);
@@ -1744,7 +1744,7 @@ class Table {
     /**
      * Orders the returned rows
      * @param string $column
-     * @param string $direction One of \DBScribe\Table::ORDER_ASC or \DBScribe\Table::ORDER_DESC
+     * @param string $direction One of \dbScribe\Table::ORDER_ASC or \dbScribe\Table::ORDER_DESC
      * @return Table
      */
     public function orderBy($column, $direction = Table::ORDER_ASC) {
@@ -1781,7 +1781,7 @@ class Table {
     /**
      * Gets the distinct values of a column
      * @param string $column
-     * @param array $criteria Array with values \DBScribe\Row or array of [column => value]
+     * @param array $criteria Array with values \dbScribe\Row or array of [column => value]
      * @return ArrayCollection
      */
     public function distinct($column, array $criteria = array(), $return = Table::RETURN_MODEL) {
@@ -1797,7 +1797,7 @@ class Table {
     /**
      * Updates the given row(s) in the table<br />
      * Many rows can be updated at once.
-     * @param array $values Array with values \DBScribe\Row or array of [column => value]
+     * @param array $values Array with values \dbScribe\Row or array of [column => value]
      * @param string $whereColumn Column name to check. Default is the id column
      * @todo Allow multiple columns as criteria where
      * @return Table
@@ -1947,7 +1947,7 @@ class Table {
     /**
      * Deletes the given row(s) in the table<br />
      * Many rows can be deleted at once.
-     * @param array $criteria Array with values \DBScribe\Row or values of [column => value]
+     * @param array $criteria Array with values \dbScribe\Row or values of [column => value]
      * @return Table
      */
     public function delete(array $criteria = array()) {
@@ -1994,7 +1994,7 @@ class Table {
     /**
      * Allows reuse of parameters
      * @param boolean $bool
-     * @return \DBScribe\Table
+     * @return \dbScribe\Table
      */
     public function reuseParams($bool = true) {
 	$this->reuseParams = $bool;

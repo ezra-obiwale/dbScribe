@@ -1,6 +1,6 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
 use Exception;
 
@@ -46,7 +46,7 @@ class Repository extends Table {
      */
     public function fetchAll($returnType = Table::RETURN_MODEL) {
         $return = $this->select(array(), $returnType);
-        if (is_a($return, 'DBScribe\Table')) $return = $return->execute();
+        if (is_a($return, 'dbScribe\Table')) $return = $return->execute();
         if (is_bool($return)) return new ArrayCollection();
 
         return $return;
@@ -63,7 +63,7 @@ class Repository extends Table {
     public function findBy($column, $value, $returnType = Table::RETURN_MODEL) {
         $return = $this->select(array(array(Util::camelTo_($column) => $value)),
                 $returnType);
-        if (is_a($return, 'DBScribe\Table')) $return = $return->execute();
+        if (is_a($return, 'dbScribe\Table')) $return = $return->execute();
         if (is_bool($return)) return new ArrayCollection();
 
         return $return;
@@ -120,7 +120,7 @@ class Repository extends Table {
             $criteria = array($criteria);
         }
         $return = $this->select($criteria, $returnType);
-        if (is_a($return, 'DBScribe\Table')) $return = $return->execute();
+        if (is_a($return, 'dbScribe\Table')) $return = $return->execute();
         return $return;
     }
 

@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-namespace DBScribe;
+namespace dbScribe;
 
 /**
  * This class is meant to replace arrays as criteria
@@ -50,7 +50,7 @@ class Criteria {
     /**
      * Set the name of the table for which the query criteria is for
      * @param string $tableName
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function setTableName($tableName) {
         $this->query = str_replace($this->tableName, $tableName, $this->query);
@@ -96,7 +96,7 @@ class Criteria {
 
     /**
      * Start grouping criteria and join to the query with AND
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function andGroup() {
         return $this->doGroup('AND');
@@ -104,7 +104,7 @@ class Criteria {
 
     /**
      * Start grouping criteria and join to the query with OR
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function orGroup() {
         return $this->doGroup('OR');
@@ -112,7 +112,7 @@ class Criteria {
 
     /**
      * End criteria grouping
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function endGroup() {
         if ($this->groups) {
@@ -151,7 +151,7 @@ class Criteria {
     /**
      * @param string $column
      * @param mixed $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function equal($column, $value) {
         return $this->doOperand($column, '=', $value);
@@ -160,7 +160,7 @@ class Criteria {
     /**
      * @param string $column
      * @param mixed $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function notEqual($column, $value) {
         return $this->doOperand($column, '!=', $value);
@@ -169,7 +169,7 @@ class Criteria {
     /**
      * @param string $column
      * @param mixed $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function like($column, $value) {
         return $this->doOperand($column, 'LIKE', $value);
@@ -178,7 +178,7 @@ class Criteria {
     /**
      * @param string $column
      * @param mixed $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function notLike($column, $value) {
         return $this->doOperand($column, 'NOT LIKE', $value);
@@ -187,7 +187,7 @@ class Criteria {
     /**
      * @param string $column
      * @param mixed $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function regExp($column, $value) {
         return $this->doOperand($column, 'REGEXP', $value);
@@ -196,7 +196,7 @@ class Criteria {
     /**
      * @param string $column
      * @param mixed $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function notRegExp($column, $value) {
         return $this->doOperand($column, 'NOT REGEXP', $value);
@@ -204,7 +204,7 @@ class Criteria {
 
     /**
      * @param string $column
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function isNull($column) {
         return $this->doOperand($column, 'IS NULL');
@@ -212,7 +212,7 @@ class Criteria {
 
     /**
      * @param string $column
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function isNotNull($column) {
         return $this->doOperand($column, 'IS NOT NULL');
@@ -221,7 +221,7 @@ class Criteria {
     /**
      * @param string $column
      * @param array $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function in($column, array $value) {
         return $this->doOperand($column, 'IN', $value);
@@ -230,7 +230,7 @@ class Criteria {
     /**
      * @param string $column
      * @param array $value
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function notIn($column, array $value) {
         return $this->doOperand($column, 'NOT IN', $value);
@@ -240,7 +240,7 @@ class Criteria {
      * @param string $column
      * @param mixed $value1
      * @param mixed $value2
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function between($column, $value1, $value2) {
         return $this->doOperand($column, 'BETWEEN', $value1, 'AND', $value2);
@@ -250,7 +250,7 @@ class Criteria {
      * @param string $column
      * @param mixed $value1
      * @param mixed $value2
-     * @return \DBScribe\Criteria
+     * @return \dbScribe\Criteria
      */
     public function notBetween($column, $value1, $value2) {
         return $this->doOperand($column, 'NOT BETWEEN', $value1, 'AND', $value2);

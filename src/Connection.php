@@ -1,6 +1,6 @@
 <?php
 
-namespace DBScribe;
+namespace dbScribe;
 
 /**
  * The class wraps around the PDO class to serve as the connection point to the
@@ -108,7 +108,7 @@ class Connection extends \PDO {
      * Sets the prefix to be used with the tables
      *
      * @param string $prefix
-     * @return \DBScribe\Connection
+     * @return \dbScribe\Connection
      */
     public function setTablePrefix($prefix) {
         $this->options['tablePrefix'] = $prefix;
@@ -155,7 +155,7 @@ class Connection extends \PDO {
     /**
      * Selects another database to work with
      * @param string $dbName
-     * @return \DBScribe\Connection
+     * @return \dbScribe\Connection
      */
     public function selectDB($dbName) {
         $this->dbName = $dbName;
@@ -170,7 +170,7 @@ class Connection extends \PDO {
 
     /**
      * Creates a table in the database
-     * @param \DBScribe\Table $table
+     * @param \dbScribe\Table $table
      * @param boolean $dropIfExists
      * @return mixed
      * @throws \Exception
@@ -256,7 +256,7 @@ class Connection extends \PDO {
 
     /**
      * Changes a table in the database
-     * @param \DBScribe\Table $table
+     * @param \dbScribe\Table $table
      * @return mixed
      * @throws \Exception
      * @todo Ensure references are not only removed but replaced when adding
@@ -444,8 +444,8 @@ class Connection extends \PDO {
      * Creates a table object
      *
      * @param string $tablename Name of table in lower case
-     * @param \DBScribe\Row Model to map the table rows to
-     * @return \DBScribe\Table
+     * @param \dbScribe\Row Model to map the table rows to
+     * @return \dbScribe\Table
      */
     public function table($tablename, Row $rowModel = null) {
         return new Table($tablename, $this, $rowModel);
@@ -454,7 +454,7 @@ class Connection extends \PDO {
     /**
      * Re-processes preserved queries
      * @param bool $keepFiles
-     * @return \DBScribe\Connection
+     * @return \dbScribe\Connection
      */
     public function redoPresevedQueries($keepFiles = false) {
         $path = DATA . md5('queries') . DIRECTORY_SEPARATOR;
