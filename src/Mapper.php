@@ -322,10 +322,14 @@ abstract class Mapper extends Row {
      * @return string The type column it is
      */
     private function checkType($columnName, array $attrs) {
-        if (in_array(strtolower($attrs['type']), array('string', 'referencemany'))) {
-            return (isset($attrs['attrs']['size']) && strtolower($attrs['type']) !== 'referencemany') ? 'VARCHAR' : 'TEXT';
-        }
-        return strtoupper($attrs['type']);
+		switch (strtolower(trim($attrs['type']))) {
+			case 'string':
+				if (isset($attrs['attrs']['size'])) return 'VARCHAR';
+			case 'referencemany':
+				return 'TEXT';
+			default:
+				return strtoupper($attrs['type']);
+		}
     }
 
     private function getClassPath($fullyQualifiedClassName) {
