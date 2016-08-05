@@ -268,7 +268,6 @@ class Connection extends \PDO {
 
 		if (count($table->getDropReferences())) {
 			$qry .= ' ';
-
 			$cnt = 1;
 			foreach ($table->getDropReferences(true) as $columnName) {
 				$refs = $table->getReferences();
@@ -276,24 +275,8 @@ class Connection extends \PDO {
 				if (isset($refs[$columnName]) && !empty($refs[$columnName]['constraintName'])) {
 					$qry .= $alter . ' DROP FOREIGN KEY `' . $refs[$columnName]['constraintName'] . '`; ';
 				}
-
 				$cnt++;
 			}
-		}
-
-		if (count($table->getDropIndexes())) {
-			$qry .= $alter;
-			$cnt = 1;
-			$iQry = '';
-			foreach ($table->getDropIndexes(true) as $column) {
-				if (array_key_exists($column, $table->getIndexes())) {
-					if ($iQry) $iQry .= ',';
-					$iQry .= ' DROP INDEX `' . $table->getIndexes($column) . '`';
-				}
-				$cnt++;
-			}
-
-			$qry .= $iQry . ';';
 		}
 
 		$dropColumns = $table->getDropColumns(true);
@@ -370,6 +353,21 @@ class Connection extends \PDO {
 			$qry .= ';';
 		}
 
+		if (count($table->getDropIndexes())) {
+			$qry .= $alter;
+			$cnt = 1;
+			$iQry = '';
+			foreach ($table->getDropIndexes(true) as $column) {
+				if (array_key_exists($column, $table->getIndexes())) {
+					if ($iQry) $iQry .= ',';
+					$iQry .= ' DROP INDEX `' . $table->getIndexes($column) . '`';
+				}
+				$cnt++;
+			}
+
+			$qry .= $iQry . ';';
+		}
+
 		if ($table->getNewPrimaryKey()) {
 			$qry .= ' ' . $alter . ' ADD PRIMARY KEY (`' .
 					$table->getNewPrimarykey(true) . '`);';
@@ -383,7 +381,6 @@ class Connection extends \PDO {
 						"`) ON DELETE {$desc["onDelete"]} ON UPDATE {$desc["onUpdate"]}; ";
 			}
 		}
-
 		$return = $this->doPrepare($qry);
 		$table->init();
 		return $return;
@@ -482,12 +479,12 @@ class Connection extends \PDO {
 			if ($values) {
 				foreach ($values as $vals) {
 					$res = $stmt->execute($vals);
-					$this->createReturn($query, $retIds, $stmt, $res, $return, $vals);
+					$return[] = $this->createReturn($query, $retIds, $res);
 				}
 			}
 			else {
 				$res = $stmt->execute();
-				$this->createReturn($query, $retIds, $stmt, $res, $return);
+				$return[] = $this->createReturn($query, $retIds, $res);
 			}
 
 			if (strtolower(substr(ltrim($query), 0, 6)) === 'select') {
@@ -499,8 +496,7 @@ class Connection extends \PDO {
 					return $return;
 				}
 				else {
-					$ret = array_values($return);
-					return $ret[0];
+					return $return[0];
 				}
 			}
 		}
@@ -509,13 +505,10 @@ class Connection extends \PDO {
 		}
 	}
 
-	private function createReturn($query, $retIds, $stmt, $res, &$return, $vals = array()) {
-		if (strtolower(substr(ltrim($query), 0, 6)) === 'insert' && $retIds) {
-			$return[] = $this->lastInsertId();
-		}
-		else {
-			$return[] = $res;
-		}
+	private function createReturn($query, $retIds, $res) {
+		return (strtolower(substr(ltrim($query), 0, 6)) === 'insert' && $retIds) ?
+				$this->lastInsertId() :
+				$res;
 	}
 
 	/**
@@ -536,6 +529,10 @@ class Connection extends \PDO {
 		$return = $this->rollBack();
 		$this->beginTransaction();
 		return $return;
+	}
+
+	public function __toString() {
+		return get_called_class();
 	}
 
 }

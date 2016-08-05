@@ -8,7 +8,7 @@ namespace dbScribe;
  * 
  * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
-class Util {
+class Util extends Commons {
 
 	/**
 	 * Creates a globally unique 36 character id

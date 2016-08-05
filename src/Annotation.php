@@ -7,7 +7,7 @@ namespace dbScribe;
  *
  * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
-class Annotation {
+class Annotation extends Commons {
 
 	/**
 	 * Annotations found
@@ -35,7 +35,6 @@ class Annotation {
 				throw new \Exception('Constructor expects param $class to be a class name string or an object. ' . gettype($class) . ' given.');
 
 		$this->reflector = new \ReflectionClass($class);
-		$this->parents = array_reverse(class_parents($class));
 	}
 
 	/**
@@ -43,6 +42,7 @@ class Annotation {
 	 * @return array
 	 */
 	final public function getParents() {
+		if (!$this->parents) $this->parents = array_reverse(class_parents($class));
 		return $this->parents;
 	}
 
@@ -166,7 +166,7 @@ class Annotation {
 	 * parses annotations for properties only
 	 */
 	private function parseProperties($docType = '') {
-		$parents = $this->parents;
+		$parents = $this->getParents();
 		foreach ($this->reflector->getProperties() as $refProp) {
 			if (is_string($parents[$refProp->class])) $parents[$refProp->class] = array();
 			$parents[$refProp->class][$refProp->name] = $this->parseDocComment($refProp->getDocComment(), $docType);

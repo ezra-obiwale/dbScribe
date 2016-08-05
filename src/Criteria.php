@@ -33,7 +33,7 @@ namespace dbScribe;
  * @author Ezra Obiwale <contact@ezraobiwale.com>
  * @todo Implement in whole system
  */
-class Criteria {
+class Criteria extends Commons {
 
 	protected $query;
 	protected $dummyQuery;

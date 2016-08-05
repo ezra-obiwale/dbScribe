@@ -10,7 +10,7 @@ use Exception;
  *
  * @author Ezra Obiwale <contact@ezraobiwale.com>
  */
-class Table {
+class Table extends Commons {
 
 	const ORDER_ASC = 'ASC';
 	const ORDER_DESC = 'DESC';
@@ -255,12 +255,6 @@ class Table {
 	protected $relationshipData;
 
 	/**
-	 * Used with customWhere(). No relationship with join()
-	 * @var string AND|OR
-	 */
-	protected $customWhereJoin;
-
-	/**
 	 * Indicates the type of results expected
 	 * @var int One of the RETURN_* constants of this class
 	 */
@@ -291,6 +285,12 @@ class Table {
 	protected $reuseParams;
 
 	/**
+	 * Indicates whether to return last insert ids on insert
+	 * @var boolean
+	 */
+	private $lastInsertIds;
+
+	/**
 	 * Class contructor
 	 * @param string $name Name of the table, without the prefix if already
 	 * supplied in the connection object
@@ -309,6 +309,7 @@ class Table {
 		$this->joinings = array();
 		$this->fromCache = true;
 		$this->genQry = false;
+		$this->lastInsertIds = false;
 
 		$this->columns = array();
 		$this->references = array();
@@ -500,13 +501,19 @@ class Table {
 	/**
 	 * Fetches the indexes
 	 * @param string $columnName Name of column to return the index
+	 * @param string|boolean $target The key to to target. Set to false to to return everything on the column
 	 * @return array
 	 */
-	public function getIndexes($columnName = null) {
+	public function getIndexes($columnName = null, $target = 'indexName') {
 		if (!$this->indexes) {
 			$this->indexes = array();
 		}
-		return ($columnName) ? $this->indexes[$columnName] : $this->indexes;
+		if ($columnName) {
+			$return = $this->indexes[$columnName];
+			if ($return && $target) return $return[$target];
+			return $return;
+		}
+		return $this->indexes;
 	}
 
 	/**
@@ -517,8 +524,7 @@ class Table {
 	 * @return Table
 	 */
 	public function addIndex($columnName, $type = Table::INDEX_REGULAR) {
-		if (!array_key_exists($columnName, $this->getIndexes()) && !array_key_exists($columnName, $this->newIndexes))
-				$this->newIndexes[$columnName] = $type;
+		if (!array_key_exists($columnName, $this->newIndexes)) $this->newIndexes[$columnName] = $type;
 		return $this;
 	}
 
@@ -539,8 +545,6 @@ class Table {
 	 */
 	public function dropIndex($columnName) {
 		if (!in_array($columnName, $this->dropIndexes)) $this->dropIndexes[] = $columnName;
-
-		if (array_key_exists($columnName, $this->getReferences())) $this->dropReference($columnName);
 		return $this;
 	}
 
@@ -581,9 +585,6 @@ class Table {
 	 */
 	public function dropColumn($columnName) {
 		$this->dropColumns[] = $columnName;
-		if (array_key_exists($columnName, $this->references)) {
-			$this->dropReference($columnName);
-		}
 		return $this;
 	}
 
@@ -632,10 +633,11 @@ class Table {
 
 	/**
 	 * Fetches the references in the table
+	 * @param string $columnName The name of the column for which to fetch references
 	 * @return array
 	 */
-	public function getReferences() {
-		return $this->references;
+	public function getReferences($columnName = null) {
+		return $columnName ? $this->references[$columnName] : $this->references;
 	}
 
 	/**
@@ -644,6 +646,15 @@ class Table {
 	 */
 	public function getBackReferences() {
 		return $this->backReferences;
+	}
+
+	/**
+	 * Check if the column is referenced is by at least another table
+	 * @param string $columnName
+	 * @return boolean
+	 */
+	final public function columnIsReferenced($columnName) {
+		return array_key_exists($columnName, $this->backReferences);
 	}
 
 	/**
@@ -675,7 +686,6 @@ class Table {
 	 */
 	public function addReference($columnName, $refTable, $refColumn, $onDelete = 'RESTRICT',
 							  $onUpdate = 'RESTRICT') {
-		$this->addIndex($columnName);
 		$this->newReferences[$columnName] = array(
 			'table' => $refTable,
 			'column' => $refColumn,
@@ -775,7 +785,7 @@ class Table {
 								AND i.TABLE_NAME = '" . $this->name . "'";
 
 		$define = $this->connection->doPrepare($qry, null, array('model' => false));
-		if (is_bool($define)) return;
+		if (is_bool($define)) return $this;
 
 		foreach ($define as $info) {
 			if (isset($info['constraintType']) && $info['constraintType'] === 'PRIMARY KEY') {
@@ -810,7 +820,10 @@ class Table {
 		foreach ($columns as $column) {
 			$this->columns[$column['colName']] = $column;
 			if (in_array($column['colKey'], array('MUL', 'UNI', 'PRI', 'SPA', 'FUL'))) {
-				$this->indexes[$column['colName']] = $column['indexName'];
+				$this->indexes[$column['colName']] = array(
+					'indexName' => $column['indexName'],
+					'colKey' => $column['colKey'],
+				);
 			}
 		}
 	}
@@ -858,6 +871,7 @@ class Table {
 		$this->query = 'INSERT INTO `' . $this->name . '` (';
 		$columns = array();
 		$noOfColumns = 0;
+		$pk = Util::camelTo_($this->getPrimaryKey());
 		foreach (array_values($values) as $ky => $row) {
 			$rowArray = $this->checkModel($row, true);
 			if ($ky === 0) $noOfColumns = count($rowArray);
@@ -872,11 +886,12 @@ class Table {
 
 			foreach ($rowArray as $column => &$value) {
 				if (empty($value) && $value != 0) continue;
-
 				$column = Util::camelTo_($column);
 
 				if (!in_array($column, $columns)) $columns[] = $column;
 				$this->values[$ky][':' . $column] = $value;
+
+				if (!is_bool($pk) && $column === $pk) $pk = true;
 			}
 		}
 
@@ -886,6 +901,7 @@ class Table {
 		$this->query .= ')';
 
 		$this->multiple = true;
+		if ($pk !== TRUE) $this->lastInsertIds = true;
 		if ($this->delayExecute) {
 			return $this;
 		}
@@ -895,7 +911,7 @@ class Table {
 
 	/**
 	 * Fetches the relationships between the columns in this table and the
-	 * give table
+	 * given table
 	 * @param string $table
 	 * @return array
 	 */
@@ -939,11 +955,11 @@ class Table {
 	}
 
 	private function setupRelationship($columnName, $refColumn, $refTable, array &$relationships,
-									$push = true) {
+									$backward = true) {
 		return $relationships[$refTable][] = array(
 			'column' => $columnName,
 			'refColumn' => $refColumn,
-			'push' => $push
+			'backward' => $backward
 		);
 	}
 
@@ -1018,7 +1034,7 @@ class Table {
 		$this->current = self::OP_SELECT;
 
 		$this->query = 'SELECT ' . $this->prepareColumns();
-		$this->query .= ' FROM `' . $this->name . '`' . $this->processJoins();
+		$this->query .= ' FROM `' . $this->name . '`';
 
 		$this->where($criteria);
 
@@ -1124,11 +1140,11 @@ class Table {
 	public function where(array $criteria, $joinWithAnd = true, $notEqual = false,
 					   $valuesAreColumns = false) {
 		if (count($criteria)) {
-			if (!$this->where) {
+			if (!trim($this->where)) {
 				$this->where = ' WHERE ';
 			}
 
-			if ($this->where != ' WHERE ') {
+			if ($this->where != ' WHERE ' && substr($this->where, strlen($this->where) - 1) != '(') {
 				$this->where .= $joinWithAnd ? ' AND ' : ' OR ';
 			}
 			foreach ($criteria as $ky => $row) {
@@ -1193,54 +1209,60 @@ class Table {
 		return $this;
 	}
 
-	private function returnSelect($return) {
-		if (!is_array($return)) {
-			$return = array();
+	private function returnSelect($rows) {
+		if (!is_array($rows)) {
+			$rows = array();
 		}
-		$forThis = $this->relationshipData = array();
-
-		foreach ($return as &$ret) {
-			$imm = array();
-			foreach ($this->targetColumns as $col) {
-				$imm[Util::_toCamel($col)] = @$ret[Util::_toCamel($col)];
-				unset($ret[Util::_toCamel($col)]);
+		$forThis = array();
+		foreach ($rows as &$row) {
+			if ($this->joinQuery) {
+				foreach ($row as $col => $val) {
+					if (stristr($col, '__ds__')) {
+						$split = explode('__ds__', $col);
+						if ($this->expected === self::RETURN_MODEL) {
+							$row['joined'][$split[0]][$split[1]] = $val;
+						}
+						else {
+							$row[$split[0] . ucfirst($split[1])] = $val;
+						}
+						unset($row[$col]);
+					}
+				}
 			}
-
-			if ($this->resultKey && !empty($imm[Util::_toCamel($this->resultKey)])) {
-				$forThis[$imm[Util::_toCamel($this->resultKey)]] = $imm;
+			if ($this->resultKey && !empty($row[Util::_toCamel($this->resultKey)])) {
+				$forThis[$row[Util::_toCamel($this->resultKey)]] = $row;
 			}
-			else if ($this->getPrimaryKey() && !empty($imm[Util::_toCamel($this->getPrimaryKey())])) {
-				$forThis[$imm[Util::_toCamel($this->getPrimaryKey())]] = $imm;
+			else if ($this->getPrimaryKey() && !empty($row[Util::_toCamel($this->getPrimaryKey())])) {
+				$forThis[$row[Util::_toCamel($this->getPrimaryKey())]] = $row;
 			}
-			else $forThis[] = $imm;
-
-			if (!empty($ret)) {
-				$this->relationshipData[] = $ret;
-			}
+			else $forThis[] = $row;
 		}
 		switch ($this->expected) {
 			case self::RETURN_JSON:
-				$return = json_encode($forThis);
+				$rows = json_encode($forThis);
 				break;
 			case self::RETURN_MODEL:
-				$return = $this->createReturnModels($forThis);
+				$rows = $this->createReturnModels($forThis);
 				break;
 			case self::RETURN_DEFAULT_BOTH:
 				foreach ($forThis as &$row) {
 					$row = array_merge($row, array_values($row));
 				}
 			case self::RETURN_DEFAULT:
-				$return = $forThis;
+				$rows = $forThis;
 				break;
 		}
-		return $return;
+		return $rows;
 	}
 
 	private function createReturnModels(array $forThis) {
 		$rows = new ArrayCollection();
-
 		foreach ($forThis as $valueArray) {
 			$row = clone $this->rowModel;
+			if (isset($valueArray['joined'])) {
+				$row->__setJoined($valueArray['joined']);
+				unset($valueArray['joined']);
+			}
 			foreach ($valueArray as $name => $value) {
 				if (method_exists($row, 'set' . $name)) $row->{'set' . $name}($value);
 				else $row->{$name} = $value;
@@ -1262,7 +1284,7 @@ class Table {
 	 * @return Table
 	 */
 	public function like($column, $value, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . strip_tags($value) . '"', $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1275,7 +1297,7 @@ class Table {
 	 * @return Table
 	 */
 	public function notLike($column, $value, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT LIKE "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT LIKE "' . strip_tags($value) . '"', $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1484,7 +1506,7 @@ class Table {
 	public function customWhere($custom, $logicalConnector = 'AND', $tablePlaceholder = ':TBL:') {
 		if ($this->where && substr($this->where, strlen($this->where) - 1) != '(')
 				$this->where .= ' ' . $logicalConnector;
-		else if (!$this->where) $this->where = ' WHERE ';
+		else if (!trim($this->where)) $this->where = ' WHERE ';
 
 		$this->where .= trim(str_replace($tablePlaceholder, $this->name, $custom));
 		return $this;
@@ -1521,7 +1543,8 @@ class Table {
 	 * @return Table
 	 */
 	public function in($column, array $values, $logicalAnd = true, $valuesAreColumns = false) {
-		$this->where(array(array($column => $values)), $logicalAnd, false, $valuesAreColumns);
+		if (count($values))
+				$this->where(array(array($column => $values)), $logicalAnd, false, $valuesAreColumns);
 		return $this;
 	}
 
@@ -1536,7 +1559,13 @@ class Table {
 	 * @return Table
 	 */
 	public function notIn($column, array $values, $logicalAnd = true, $valuesAreColumns = false) {
-		$this->where(array(array($column => $values)), $logicalAnd, true, $valuesAreColumns);
+		if (count($values))
+				$this->where(array(array($column => $values)), $logicalAnd, true, $valuesAreColumns);
+		return $this;
+	}
+
+	public function join($tableName, $columnName = null) {
+		$this->joinings['backward'][$tableName] = $columnName;
 		return $this;
 	}
 
@@ -1546,14 +1575,28 @@ class Table {
 	 * @param array $options Keys include [rowModel]
 	 */
 	public function joinOn($columnName, array $options = array()) {
-		$this->joinings[$columnName] = $options;
+		$this->joinings['forward'][$columnName] = $options;
 		return $this;
 	}
 
 	private function processJoins() {
 		$this->joinQuery = '';
 		$superStart = false;
-		foreach ($this->joinings as $table => $options) {
+		foreach ($this->joinings['forward'] as $columnName => $options) {
+			if (NULL === $reference = $this->getReferences($columnName)) continue;
+			$tableName = str_replace($this->connection->getTablePrefix(), '', $reference['refTable']);
+			$refTable = $this->connection->table($tableName);
+			$this->query = stristr($this->query, ' from `' . $this->getName() . '`', true);
+			foreach ($refTable->getColumns(true) as $column) {
+				$this->query .= ', `' . $refTable->getName() . '`.`'
+						. Util::camelTo_($column) . '` as ' . Util::_toCamel($columnName) . '__ds__' . Util::_toCamel($column);
+			}
+			if ($this->joinQuery) $this->joinQuery .= ' AND ';
+			$this->joinQuery .= ' LEFT JOIN `' . $refTable->getName() . '`'
+					. ' ON `' . $refTable->getName() . '`.`' . Util::camelTo_($reference['refColumn'])
+					. '` = `' . $this->getName() . '`.`' . Util::camelTo_($columnName) . '`';
+		}
+		foreach ($this->joinings['backward'] as $table => $options) {
 			$rel = $this->getColumnRelationships($table);
 			if (!count($rel)) continue;
 			die(var_dump('Table::processJoins()', $rel));
@@ -1575,8 +1618,8 @@ class Table {
 
 			$started = false;
 			foreach ($relationships as $ky => $rel) {
-				if (($rel['push'] && isset($options['pull']) && @$options['push']) || (!$rel['push'] && isset($options['pull']) &&
-						!$options['pull'])) continue;
+				if (($rel['backward'] && isset($options['forward']) && @$options['backward']) || (!$rel['backward'] && isset($options['forward']) &&
+						!$options['forward'])) continue;
 
 				if ($ky && $started) $this->joinQuery .= 'OR ';
 				if (!$started) $this->joinQuery .= ' ON ';
@@ -1596,10 +1639,11 @@ class Table {
 			}
 		}
 
-		if ($this->joinQuery && !$superStart)
-				throw new Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
+//		die(var_dump($this->joinQuery, $this->query, $this->where));
+//		if ($this->joinQuery && !$superStart)
+//				throw new Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
 
-		$this->joinings = array();
+		if ($this->joinQuery) $this->query .= ' FROM `' . $this->getName() . '`';
 		return $this->joinQuery;
 	}
 
@@ -1611,45 +1655,6 @@ class Table {
 	 * @param array $options
 	 * @return ArrayCollection
 	 */
-	final public function seekJoin($tableName, array $columns, Row $object = null,
-								array $options = array()) {
-		if (!$this->joinQuery) return false;
-
-		$prefix = $this->connection->getTablePrefix() . $tableName . '_';
-
-		if (!$object) {
-			$object = new Row();
-		}
-
-		$array = array();
-		foreach ($this->relationshipData as $data) {
-			foreach ($columns as $column => $value) {
-				$compare = $prefix . $column;
-				if ($data[$compare] === null) continue;
-				$found = true;
-				if ((!is_array($value) && @$data[$compare] != $value) || (is_array($value) && !in_array(@$data[$compare], $value))) {
-					$found = false;
-				}
-				if (!$found) break;
-			}
-
-			if ($found) {
-				$d = array();
-				foreach ($data as $col => $val) {
-					$d[str_replace($prefix, '', $col)] = $val;
-				}
-
-				$ob = clone $object;
-
-				$array[] = $ob->populate($d);
-			}
-		}
-
-		$this->parseWithOptions($array, $options);
-
-		return count($array) ? new ArrayCollection($array) : false;
-	}
-
 	private function parseWithOptions(array &$array, array $options) {
 		if (isset($options[0]['orderBy'])) {
 			usort($array, function($a, $b) use($options) {
@@ -2008,14 +2013,30 @@ class Table {
 					$this->doPreserveQueries();
 			$result = $this->connection->doPrepare($this->query, $this->values, array(
 				'multipleRows' => $this->multiple,
+				'lastInsertIds' => $this->lastInsertIds,
 			));
 			if ($this->current === self::OP_SELECT) $this->saveCache($result);
 			else $this->removeCache();
 		}
 		if ($this->current === self::OP_SELECT) $result = $this->returnSelect($result);
-		$this->lastQuery = $this->query . '<pre><code>' . print_r($this->values, true) . '</code></pre>';
+		$this->lastQuery = $this->getQuery(TRUE);
 		$this->resetQuery();
 		return $result;
+	}
+
+	/**
+	 * Fetches the id of the last insert action
+	 * @return int|string
+	 */
+	public function getLastInsertId() {
+		$result = $this->limit(1)
+				->targetColumns($this->getPrimaryKey())
+				->orderBy($this->getPrimaryKey(), self::ORDER_DESC)
+				->setExpectedResult(self::RETURN_DEFAULT)
+				->select();
+		if ($this->delayExecute) $result = $result->execute();
+		$result = array_values($result);
+		return $result[0][$this->getPrimaryKey()] ? $result[0][$this->getPrimaryKey()] : 0;
 	}
 
 	/**
@@ -2028,9 +2049,11 @@ class Table {
 
 	public function createQuery() {
 		if ($this->genQry) return $this->query;
+		if ($this->current === self::OP_SELECT) $this->query .= $this->processJoins();
+
 		if (!empty($this->customWhere)) {
 			if ($this->where) {
-				$this->where .= ' ' . $this->customWhereJoin . ' ' . $this->customWhere;
+				$this->where .= ' ' . $this->customWhere;
 			}
 			else {
 				$this->where = ' WHERE ' . $this->customWhere;
@@ -2058,11 +2081,10 @@ class Table {
 
 		$this->where .= ' ' . $this->limit;
 
-		if (($this->current === self::OP_SELECT || !empty($this->customWhere)) && !stristr($this->query, ' from')) {
-			$this->query .= ' FROM `' . $this->name . '`';
-		}
-		$this->query .= $this->where;
+		if ($this->current === self::OP_SELECT && !stristr($this->query, ' from `' . $this->name . '`'))
+				$this->query .= ' FROM `' . $this->name . '`';
 
+		$this->query .= $this->where;
 		$this->genQry = true;
 		return $this->query;
 	}
@@ -2097,24 +2119,17 @@ class Table {
 		$this->targetColumns = null;
 		$this->orderBy = array();
 		$this->limit = null;
-		$this->customWhere = null;
 		if (!$this->reuseParams) {
+			$this->customWhere = null;
 			$this->where = null;
 			$this->values = null;
+			$this->having = null;
 		}
-		$this->having = null;
 		$this->groups = array();
 		$this->current = null;
 		$this->multiple = false;
 		$this->expected = null;
-	}
-
-	/**
-	 * Fetches the autogenerated id of the last insert statement, if primary key is autogenerated
-	 * @return mixed
-	 */
-	public function lastInsertId() {
-		return $this->connection->lastInsertId();
+		$this->lastInsertIds = false;
 	}
 
 	/**
