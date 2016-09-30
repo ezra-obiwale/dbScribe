@@ -102,6 +102,7 @@
 <th>id</th>
 <th>first_name</th>
 <th>last_name</th>
+<th>full_name</th>
 <th>gender</th>
 </tr>
 </thead>
@@ -110,13 +111,36 @@
 <td>1</td>
 <td>Adam</td>
 <td>Freeman</td>
+<td>Adam Freeman</td>
 <td>male</td>
 </tr>
 <tr>
 <td>2</td>
 <td>Eve</td>
 <td>Gerald</td>
+<td>Eve Gerald</td>
 <td>female</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Segun</td>
+<td>Ajayi</td>
+<td>Segun Ajayi</td>
+<td>male</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Shade</td>
+<td>Adeyemi</td>
+<td>Shade Adeyemi</td>
+<td>female</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Ezra</td>
+<td>Obiwale</td>
+<td>Ezra Obiwale</td>
+<td>male</td>
 </tr>
 </tbody>
 </table>
@@ -156,6 +180,7 @@
 
 <div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>select(); <span class="pl-c">// Returns all rows</span></span>
 <span class="pl-s1"></span>
+<span class="pl-s1">    <span class="pl-c">// Select rows where firstname is Segun or Shade</span></span>
 <span class="pl-s1">    <span class="pl-smi">$criteria</span> <span class="pl-k">=</span> <span class="pl-c1">array</span>(</span>
 <span class="pl-s1">        <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Segun<span class="pl-pds">'</span></span>),</span>
 <span class="pl-s1">        <span class="pl-c1">array</span>(<span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span> <span class="pl-k">=&gt;</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>),</span>
@@ -173,7 +198,7 @@
 <span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">firstName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Shade<span class="pl-pds">'</span></span>;</span>
 <span class="pl-s1">    <span class="pl-smi">$row2</span><span class="pl-k">-&gt;</span><span class="pl-smi">lastName</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>Asegun<span class="pl-pds">'</span></span>;</span>
 <span class="pl-s1"></span>
-<span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>update(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>), <span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span>); <span class="pl-c">// updates the rows where the first_name is as given in the column to update by</span></span></pre></div>
+<span class="pl-s1">    <span class="pl-smi">$tblUser</span><span class="pl-k">-&gt;</span>update(<span class="pl-c1">array</span>(<span class="pl-smi">$row1</span>, <span class="pl-smi">$row2</span>), <span class="pl-s"><span class="pl-pds">'</span>firstName<span class="pl-pds">'</span></span>); <span class="pl-c">// updates the rows where the `first_name` is as given in the column to update by. Default is `id`</span></span></pre></div>
 
 <ul>
 <li><strong>Deleting entries</strong></li>
@@ -185,7 +210,7 @@
 <a id="advanced-usage" class="anchor" href="#advanced-usage" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Advanced Usage</h2>
 
 <h3>
-<a id="creating-models" class="anchor" href="#creating-models" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Creating Models</h3>
+<a id="creating-model-classes" class="anchor" href="#creating-model-classes" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Creating Model Classes</h3>
 
 <div class="highlight highlight-text-html-php"><pre><span class="pl-s1">    <span class="pl-k">class</span> <span class="pl-en">User</span> <span class="pl-k">extends</span> <span class="pl-c1">DBScribe\</span><span class="pl-e">Mapper</span> {</span>
 <span class="pl-s1">        <span class="pl-c">/** @DBS\Int (primary=true,autoIncrement=true,size=2) **/</span></span>
@@ -194,12 +219,19 @@
 <span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$firstName</span>;</span>
 <span class="pl-s1">        <span class="pl-c">/** @DBS\String (size=20) **/</span></span>
 <span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$lastName</span>;</span>
+<span class="pl-s1">        <span class="pl-c">/** @DBS\String (size=41) **/</span></span>
+<span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-smi">$fullName</span>;</span>
 <span class="pl-s1"></span>
 <span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-k">function</span> <span class="pl-en">preSave</span>() {</span>
 <span class="pl-s1">            <span class="pl-c">// do something before saving to database</span></span>
+<span class="pl-s1">            <span class="pl-smi">$this</span><span class="pl-k">-&gt;</span><span class="pl-smi">fullName</span> <span class="pl-k">=</span> <span class="pl-smi">$this</span><span class="pl-k">-&gt;</span><span class="pl-smi">firstName</span> <span class="pl-k">.</span> <span class="pl-s"><span class="pl-pds">'</span> <span class="pl-pds">'</span></span> <span class="pl-k">.</span> <span class="pl-smi">$this</span><span class="pl-k">-&gt;</span><span class="pl-smi">lastName</span>;</span>
+<span class="pl-s1"></span>
+<span class="pl-s1">            <span class="pl-k">parent</span><span class="pl-k">::</span>preSave();</span>
 <span class="pl-s1">        }</span>
 <span class="pl-s1"></span>
 <span class="pl-s1">        <span class="pl-k">public</span> <span class="pl-k">function</span> <span class="pl-en">postFetch</span>() {</span>
+<span class="pl-s1">            <span class="pl-k">parent</span><span class="pl-k">::</span>postFetch();</span>
+<span class="pl-s1"></span>
 <span class="pl-s1">            <span class="pl-c">// do something after retrieving from database</span></span>
 <span class="pl-s1">        }</span>
 <span class="pl-s1">    }</span>
