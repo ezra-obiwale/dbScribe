@@ -7,7 +7,7 @@ namespace dbScribe;
  *
  * @author Ezra
  */
-class Commons {
+abstract class Commons {
 
 	/**
 	 * Returns the name of the class as the string

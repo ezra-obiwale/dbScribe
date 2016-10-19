@@ -235,6 +235,14 @@ class ArrayCollection extends ArrayObject implements JsonSerializable {
 		return $this->getArrayCopy();
 	}
 
+	/**
+	 * Return the data as a JSON string
+	 * @return array
+	 */
+	public function toJSON() {
+		return json_encode($this->toArray());
+	}
+
 	public function jsonSerialize() {
 		return $this->getArrayCopy();
 	}

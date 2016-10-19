@@ -64,9 +64,8 @@ class Connection extends \PDO {
 
 		if (@$options['create']) {
 			parent::__construct(stristr($dsn, ';dbname=', true), $username, $password);
-			if ($this->newDB($this->dbName) && $this->dbName) {
-				$this->query('use `' . $this->dbName . '`');
-			}
+			$this->newDB($this->dbName);
+			$this->query('use `' . $this->dbName . '`');
 		}
 		else parent::__construct($dsn, $username, $password, $options);
 
@@ -390,7 +389,8 @@ class Connection extends \PDO {
 		$qry = '';
 		$cnt = 1;
 		foreach ($columns as $column => $desc) {
-			if (!in_array($column, $table->getColumns(true)) || (in_array($column, $table->getColumns(true)) && in_array($column, $dropColumns))) {
+			if (!in_array($column, $table->getColumns(true)) || (in_array($column, $table->getColumns(true)) && in_array($column,
+																												$dropColumns))) {
 				if ($qry) $qry .= ',';
 				$qry .= ' ADD COLUMN `' . $column . '` ' . $desc;
 			}
@@ -472,32 +472,21 @@ class Connection extends \PDO {
 			$multipleRows = isset($options['multipleRows']) ? $options['multipleRows'] : false;
 			$retIds = (isset($options['lastInsertIds'])) ?
 					$options['lastInsertIds'] : false;
-
 			if (!$multipleRows && $values !== null) $values = array($values);
 			$stmt = $this->prepare($query);
 			$return = array();
-			if ($values) {
-				foreach ($values as $vals) {
-					$res = $stmt->execute($vals);
-					$return[] = $this->createReturn($query, $retIds, $res);
-				}
-			}
-			else {
-				$res = $stmt->execute();
-				$return[] = $this->createReturn($query, $retIds, $res);
-			}
+			if ($values)
+					foreach ($values as $vals)
+						$return[] = $this->createReturn($query, $retIds, $stmt->execute($vals));
+			else $return[] = $this->createReturn($query, $retIds, $stmt->execute());
 
 			if (strtolower(substr(ltrim($query), 0, 6)) === 'select') {
 				$return = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 				return $return;
 			}
 			else {
-				if (count($return) > 1) {
-					return $return;
-				}
-				else {
-					return $return[0];
-				}
+				if (count($return) > 1) return $return;
+				else return $return[0];
 			}
 		}
 		catch (\PDOException $ex) {

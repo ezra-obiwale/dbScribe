@@ -31,6 +31,7 @@ abstract class Mapper extends Row {
 	 * @param Table $table Live table connection
 	 */
 	public function init(Table &$table) {
+		set_time_limit(60);
 		$this->setTable($table);
 		@session_start();
 		if (!$this->getConnection()->canAutoUpdate()) {
@@ -228,7 +229,8 @@ abstract class Mapper extends Row {
 						$descArray['attrs']['reference']['onDelete'] : 'RESTRICT';
 				$onUpdate = (isset($descArray['attrs']['reference']['onUpdate'])) ?
 						$descArray['attrs']['reference']['onUpdate'] : 'RESTRICT';
-				$this->getTable()->addReference($dbColumnName, $descArray['attrs']['reference']['table'], $descArray['attrs']['reference']['column'], $onDelete, $onUpdate);
+				$this->getTable()->addReference($dbColumnName, $descArray['attrs']['reference']['table'],
+									$descArray['attrs']['reference']['column'], $onDelete, $onUpdate);
 
 				$refTable = new Table($descArray['attrs']['reference']['table'], $this->getConnection());
 				$refColumns = $refTable->getColumns();
@@ -267,11 +269,10 @@ abstract class Mapper extends Row {
 	 * @return string
 	 */
 	private function parseAttributes($columnName, array $attrs, $isCreate = true) {
-		$return = $this->checkType($columnName, $attrs); // type
-
-		if (strtolower($attrs['type']) === 'timestamp' && !isset($attrs['attrs']['default'])) {
-			$attrs['attrs']['default'] = '"0000-00-00 00:00:00"';
-		}
+		$return = $this->checkType($attrs); // type
+//		if (strtolower($attrs['type']) === 'timestamp' && !isset($attrs['attrs']['default'])) {
+//			$attrs['attrs']['default'] = '0000-00-00 00:00:00';
+//		}
 
 		if (isset($attrs['attrs']['size'])) $return .= '(' . $attrs['attrs']['size'] . ')'; // size
 
@@ -315,10 +316,13 @@ abstract class Mapper extends Row {
 	 * @param array $attrs
 	 * @return string The type column it is
 	 */
-	private function checkType($columnName, array $attrs) {
+	private function checkType(array $attrs) {
 		switch (strtolower(trim($attrs['type']))) {
 			case 'string':
 				if (isset($attrs['attrs']['size'])) return 'VARCHAR';
+				return 'TEXT';
+			case 'boolean':
+				return 'TINYINT(1)';
 			case 'array':
 			case 'referencemany':
 				return 'TEXT';
@@ -426,6 +430,7 @@ abstract class Mapper extends Row {
 			if ($this->getTable()->exists()) {
 				$liveDesc = true;
 				foreach ($this->getTable()->getColumns() as $columnName => $info) {
+					set_time_limit(20);
 					$columnName = Util::_toCamel($columnName);
 					$type = ucfirst(preg_filter('/[^a-zA-Z]/', '', $info['colType']));
 					$size = preg_filter('/[^0-9]/', '', $info['colType']);
@@ -435,8 +440,8 @@ abstract class Mapper extends Row {
 									$type = $newDesc[$columnName]['type'];
 							break;
 						case "tinyint":
-							if (array_key_exists($columnName, $newDesc) && in_array(strtolower($newDesc[$columnName]['type'], array('boolean', 'tinyint', 'string'))))
-									$type = $newDesc[$columnName]['type'];
+							if (array_key_exists($columnName, $newDesc) && in_array(strtolower($newDesc[$columnName]['type'],
+																		  array('boolean', 'tinyint', 'string')))) $type = $newDesc[$columnName]['type'];
 							else $type = 'Boolean';
 							break;
 					}
@@ -447,7 +452,7 @@ abstract class Mapper extends Row {
 
 					if (strtolower($type) !== 'boolean') $oldDesc[$columnName]['attrs']['size'] = $size;
 
-					if ($info['nullable'] == 'true') $oldDesc[$columnName]['attrs']['nullable'] = 'true';
+					if ($info['nullable'] == 'yes') $oldDesc[$columnName]['attrs']['nullable'] = 'true';
 					else if (array_key_exists($columnName, $newDesc) && @$newDesc[$columnName]['attrs']['nullable'] == 'false') {
 						$oldDesc[$columnName]['attrs']['nullable'] = 'false';
 					}
@@ -499,8 +504,46 @@ abstract class Mapper extends Row {
 		$toDo['remove'] = array_map(function($ppt) {
 			return Util::camelTo_($ppt);
 		}, array_keys($oldDesc));
-
 		return $this->updateTable($toDo);
+	}
+
+	/**
+	 * Checks if the new definition is different from that which exists on the table
+	 * 
+	 * @param array $new Array of the new definition
+	 * @param array $old Array of the old definition from the table
+	 * @return boolean TRUE if different, FALSE otherwise.
+	 */
+	private function checkDiff(array $new, array $old) {
+		$def = $this->checkType($new);
+		if ($new['attrs']['size']) $def .= '(' . $new['attrs']['size'] . ')';
+		if (strtolower($def) !== $old['colType'] ||
+				$new['attrs']['charset'] !== $old['charset'] ||
+				$new['attrs']['collation'] !== $old['collation'] ||
+				(strtolower($new['attrs']['nullable']) == 'true' && $old['nullable'] !== 'YES') ||
+				$new['attrs']['default'] !== $old['colDefault'] ||
+				(strtolower($new['attrs']['primary']) == 'true' && $old['colKey'] !== 'PRI') ||
+				(strtolower($new['attrs']['unique']) == 'true' && $old['colKey'] !== 'UNI') ||
+				(strtolower($new['attrs']['index']) == 'true' && $old['colKey'] !== 'MUL') ||
+				(strtolower($new['attrs']['fullIndex']) == 'true' && $old['colKey'] !== 'MULL')
+		) return true;
+		return false;
+	}
+
+	/**
+	 * Checks if the column reference has changed
+	 * @param string $columnName
+	 * @param array $ref
+	 * @return boolean
+	 */
+	private function refIsDiff($columnName, $ref) {
+		$defs = $this->getTable()->getReferences($columnName);
+		if (!$defs) return true;
+		if ($defs['refTable'] !== $ref['table'] ||
+				$defs['refColumn'] !== $ref['column'] ||
+				strtolower($defs['onUpdate']) !== $ref['onUpdate'] ||
+				strtolower($defs['onDelete']) !== $ref['onDelete']) return true;
+		return false;
 	}
 
 	/**
@@ -509,26 +552,33 @@ abstract class Mapper extends Row {
 	 * @return mixed
 	 */
 	private function updateTable(array $columns) {
-		$this->updateReferences();
+		$this->updateReferences(); // update connected tables too
 		$canUpdate = false;
 		foreach ($columns['remove'] as $columnName) {
 			$canUpdate = true;
 			$this->getTable()->dropColumn(Util::camelTo_($columnName));
 		}
 
+		$defs = $this->getTable()->getColumns();
 		foreach ($columns['update'] as $columnName => &$desc) {
-			$canUpdate = true;
 			$dbColumnName = Util::camelTo_($columnName);
-
-			$this->checkIndexes($dbColumnName, $desc, $this->getTable());
-			if (isset($desc['attrs']['reference'])) {
-				if ($this->getTable()->count($this->getTable()->getPrimaryKey()))
-						throw new \Exception("Update Reference Error: Table `" . $this->getTable()->getName() . "` contains data.");
+			if ($alter = $this->checkDiff($desc, $defs[$dbColumnName]))
+					$this->checkIndexes($dbColumnName, $desc, $this->getTable());
+			if (isset($desc['attrs']['reference']) && $this->refIsDiff($dbColumnName,
+															  $desc['attrs']['reference'])) {
+				if ($this->getTable()->count())
+						throw new \Exception("Update Reference Error: Table `" . $this->getTable()->getName() . "` contains data.<hr />"
+					. "Possible Solutions:<ul>"
+					. "<li>Manually update the column</li>"
+					. "<li>Backup and remove the data, re-run this script, then restore your data.</li>"
+					. "</ul>");
+				$alter = true;
 				$onDelete = (isset($desc['attrs']['reference']['onDelete'])) ?
 						$desc['attrs']['reference']['onDelete'] : 'RESTRICT';
 				$onUpdate = (isset($desc['attrs']['reference']['onUpdate'])) ?
 						$desc['attrs']['reference']['onUpdate'] : 'RESTRICT';
-				$this->getTable()->alterReference($dbColumnName, $desc['attrs']['reference']['table'], $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
+				$this->getTable()->alterReference($dbColumnName, $desc['attrs']['reference']['table'],
+									  $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
 				unset($desc['attrs']['reference']['table']);
 				unset($desc['attrs']['reference']['column']);
 				unset($desc['attrs']['reference']['model']);
@@ -544,14 +594,17 @@ abstract class Mapper extends Row {
 				}
 			}
 
-			$this->getTable()->alterColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
+			if ($alter) {
+				$canUpdate = true;
+				$this->getTable()->alterColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
+			}
 
 			if (isset($desc['attrs']['primary']) && $desc['attrs']['primary'])
 					$this->getTable()->setPrimaryKey($dbColumnName);
 		}
 
 		foreach ($columns['new'] as $columnName => $desc) {
-			$canUpdate = true;
+			if (in_array(Util::camelTo_($columnName), $this->getTable()->getColumns(true))) continue;
 			$dbColumnName = Util::camelTo_($columnName);
 
 			if (isset($desc['attrs']['reference'])) {
@@ -559,7 +612,8 @@ abstract class Mapper extends Row {
 						$desc['attrs']['reference']['onDelete'] : 'RESTRICT';
 				$onUpdate = (isset($desc['attrs']['reference']['onUpdate'])) ?
 						$desc['attrs']['reference']['onUpdate'] : 'RESTRICT';
-				$this->getTable()->addReference($dbColumnName, $desc['attrs']['reference']['table'], $desc['attrs']['reference']['column'], $onDelete, $onUpdate);
+				$this->getTable()->addReference($dbColumnName, $desc['attrs']['reference']['table'],
+									$desc['attrs']['reference']['column'], $onDelete, $onUpdate);
 				unset($desc['attrs']['reference']['table']);
 				unset($desc['attrs']['reference']['column']);
 				unset($desc['attrs']['reference']['model']);
@@ -576,7 +630,7 @@ abstract class Mapper extends Row {
 			}
 
 			$this->getTable()->addColumn($dbColumnName, $this->parseAttributes($columnName, $desc, false));
-
+			$canUpdate = true;
 			$this->checkIndexes($dbColumnName, $desc, $this->getTable());
 
 			if (isset($desc['attrs']['primary']) && $desc['attrs']['primary'])
@@ -649,54 +703,62 @@ abstract class Mapper extends Row {
 	 * Called when trying to connect to another table (referencing)
 	 * Update the args[0] array with a where clause based on the column if joined values are not found
 	 * Update the args[0] array with the model for the joinedValues
+	 * 
 	 * @param string $name
 	 * @param array $arguments
 	 * @param array|null $joined Found joined values
 	 */
-	protected function _preCall(&$name, array &$args, $joined = null) {
+	protected function _preCall($name, array &$args, $joined = null) {
 		if (!method_exists($this, $name)) {
-			$settings = $this->getCachedSettings($name);
-			if (array_key_exists('reference', $settings['attrs']) || trim($settings['type']) == 'ReferenceMany') {
-				$modelTable = array_key_exists('model', $settings['attrs']) ?
-						$settings['attrs']['model'] :
-						$settings['attrs']['reference']['model'];
-				if (!$joined) {
-					$column = array_key_exists('column', $settings['attrs']) ?
-							$settings['attrs']['column'] :
-							$settings['attrs']['reference']['column'];
-					if (count($this->$name) > 1) $args[0]['in'] = array($column, $this->$name);
-					else if (trim($settings['type']) !== 'ReferenceMany') {
-						if (array_key_exists('where', $args[0])) {
-							foreach ($args[0]['where'] as &$array) {
-								$array[$column] = is_array($this->$name) ?
-										$this->{$name}[0] : $this->$name;
-							}
+			if ($settings = $this->getCachedSettings($name, true)) { // $name is column and exists
+				if (array_key_exists('reference', $settings['attrs']) || trim($settings['type']) == 'ReferenceMany') {
+					$modelTable = array_key_exists('model', $settings['attrs']) ?
+							$settings['attrs']['model'] :
+							$settings['attrs']['reference']['model'];
+					if (!$joined) {
+						$column = array_key_exists('column', $settings['attrs']) ?
+								$settings['attrs']['column'] :
+								$settings['attrs']['reference']['column'];
+						if (trim($settings['type']) === 'ReferenceMany' && $this->$name) {
+							$args[0]['in'] = array($column, is_array($this->$name) ?
+										$this->$name : array($this->$name));
 						}
-						else {
-							$args[0]['where'][] = array($column => is_array($this->$name) ?
-										$this->{$name}[0] : $this->$name);
+						else if (trim($settings['type']) !== 'ReferenceMany') {
+							if (array_key_exists('where', $args[0])) {
+								foreach ($args[0]['where'] as &$array) {
+									$array[$column] = is_array($this->$name) ?
+											$this->{$name}[0] : $this->$name;
+								}
+							}
+							else {
+								$args[0]['where'][] = array($column => is_array($this->$name) ?
+											$this->{$name}[0] : $this->$name);
+							}
 						}
 					}
 				}
-				// modelTable will exist if forward referencing (name is column)
-				// create modelTable if not exist, i.e. backward referencing (name is table)
-				if ($modelTable || (!$modelTable && $modelTable = self::getModelTable(Util::camelTo_($name)))) {
-					if (is_array($modelTable)) $modelTable = $modelTable[count($modelTable) - 1];
-					$model = new $modelTable;
+			}
 
-					// set the name as the target table
-					if ((!isset($args[0]['returnType']) || $args[0]['returnType'] == Table::RETURN_MODEL) &&
-							!isset($args[0]['model'])) {
-						$relTable = $this->getConnection()->table($model->getTableName());
+			// $settings will exist if forward referencing (name is column)
+			// create modelTable if not exist, i.e. backward referencing (name is table)
+			if ($settings || $modelTable = self::getModelTable(Util::camelTo_($name))) {
+				if (is_array($modelTable)) $modelTable = $modelTable[count($modelTable) - 1];
+				$model = new $modelTable;
 
-						$model->setConnection($this->getConnection());
-						$model->init($relTable);
-						$args[0]['rowModel'] = $model;
-					}
-					else if (isset($args[0]['model'])) {
-						$args[0]['rowModel'] = $args[0]['model'];
-						unset($args[0]['model']);
-					}
+				// set model as default return type
+				if (!isset($args[0]['returnType'])) $args[0]['returnType'] = Table::RETURN_MODEL;
+
+				// set the name as the target table
+				if ($args[0]['returnType'] == Table::RETURN_MODEL && !isset($args[0]['model'])) {
+					$relTable = $this->getConnection()->table($model->getTableName());
+
+					$model->setConnection($this->getConnection());
+					$model->init($relTable);
+					$args[0]['rowModel'] = $model;
+				}
+				else if (isset($args[0]['model'])) {
+					$args[0]['rowModel'] = $args[0]['model'];
+					unset($args[0]['model']);
 				}
 			}
 		}
@@ -802,15 +864,17 @@ abstract class Mapper extends Row {
 	/**
 	 * Fetches the settings for a property
 	 * @param string $property
+	 * @param boolean $strict Indicates whether NULL should be returned for the value of the
+	 * property if it doesn't exist instead of the whole parent array
 	 * @return mixed
 	 */
-	final public function getCachedSettings($property = null) {
+	final public function getCachedSettings($property = null, $strict = false) {
 		if ($this->__settings === null) {
 			$path = DATA . 'mapper' . DIRECTORY_SEPARATOR . str_replace('\\', '.', get_called_class());
 			$this->__settings = include $path;
 		}
 
-		if (is_array($this->__settings) && isset($this->__settings[$property]))
+		if (is_array($this->__settings) && (isset($this->__settings[$property]) || $strict))
 				return $this->__settings[$property];
 
 		return $this->__settings;
@@ -902,7 +966,8 @@ abstract class Mapper extends Row {
 		if (!empty($conColumns[$column]['collation']))
 				$attrs['attrs']['collation'] = $conColumns[$column]['collation'];
 
-		$attrs['attrs']['reference'] = array_merge($annot['attrs'], array(
+		$attrs['attrs']['reference'] = array_merge($annot['attrs'],
+											 array(
 			'table' => $refTable->getTableName(),
 			'column' => $column,
 		));
@@ -919,7 +984,8 @@ abstract class Mapper extends Row {
 		if (!is_dir(DATA . 'mapper')) mkdir(DATA . 'mapper', 0755, TRUE);
 
 		$content = var_export($annotations, true);
-		file_put_contents($path, '<' . '?php' . "\n\t" . 'return ' . str_replace("=> \n", ' => ', $content) . ";");
+		file_put_contents($path,
+					'<' . '?php' . "\n\t" . 'return ' . str_replace("=> \n", ' => ', $content) . ";");
 
 		$this->saveModelTable($this->getTableName(), get_called_class());
 	}
@@ -937,7 +1003,8 @@ abstract class Mapper extends Row {
 
 		if (!$modelTables[$tableName] || ($modelTables[$tableName] && is_a($this, $modelTables[$tableName]))) {
 			$modelTables[$tableName] = $modelClass;
-			return file_put_contents($mt, '<' . '?php' . "\n\t" . 'return ' . stripslashes(var_export($modelTables, true)) . ";");
+			return file_put_contents($mt,
+							'<' . '?php' . "\n\t" . 'return ' . stripslashes(var_export($modelTables, true)) . ";");
 		}
 
 		return true;
@@ -980,7 +1047,8 @@ abstract class Mapper extends Row {
 			elseif (strtolower(trim($setting['type'])) === 'time' && !empty($val) && !strstr($val, '0000')) {
 				$this->$settingKey = Util::createTimestamp(strtotime($val), 'H:i');
 			}
-			elseif (strtolower(trim($setting['type'])) === 'timestamp' && !empty($val) && !strstr($val, '0000')) {
+			elseif (strtolower(trim($setting['type'])) === 'timestamp' && !empty($val) && !strstr($val,
+																						 '0000')) {
 				$this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d H:i:s');
 			}
 			elseif (strtolower(trim($setting['type'])) === 'array' && $val) {
@@ -1013,7 +1081,8 @@ abstract class Mapper extends Row {
 		if (!empty($this->__settings)) {
 			foreach ($this->__settings as $column => $descArray) {
 				if (trim($descArray['type']) === 'ReferenceMany') {
-					$this->$column = !empty($this->$column) ? explode(self::ARRAY_COLLECTION_SEPARATOR, $this->$column) : array();
+					$this->$column = !empty($this->$column) ? explode(self::ARRAY_COLLECTION_SEPARATOR,
+													   $this->$column) : array();
 				}
 				else if (strtolower(trim($descArray['type'])) === 'array' && $this->$column) {
 					$this->$column = json_decode($this->$column, true);
@@ -1025,7 +1094,7 @@ abstract class Mapper extends Row {
 			}
 		}
 
-		parent::postFetch();
+		$this->__setContent($this->toArray(true, true));
 	}
 
 	private function getIgnore() {
@@ -1080,16 +1149,19 @@ abstract class Mapper extends Row {
 			return $array;
 		}
 		$return = array();
+
 		foreach ($array as $name => $value) {
 			if (($value === null && !$withNull)) {
 				continue;
 			}
-			else if (is_object($value) && is_a($value, 'dbScribe\ArrayCollection'))
-					$value = $value->getArrayCopy();
 			else if (is_object($value) && method_exists($value, 'toArray')) $value = $value->toArray();
 			$return[\Util::camelTo_($name)] = $value;
 		}
 		return $return;
+	}
+
+	public function jsonSerialize() {
+		return $this->toArray(false, true);
 	}
 
 }

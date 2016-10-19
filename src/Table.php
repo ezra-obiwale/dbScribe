@@ -22,9 +22,9 @@ class Table extends Commons {
 	const OP_UPDATE = 'update';
 	const OP_DELETE = 'delete';
 	const RETURN_DEFAULT = 1;
-	const RETURN_DEFAULT_BOTH = 2;
-	const RETURN_MODEL = 3;
-	const RETURN_JSON = 4;
+	const RETURN_MODEL = 2;
+	const RETURN_JSON = 3;
+	const SEPARATOR = '__ds__';
 
 	/**
 	 * Table name
@@ -153,10 +153,16 @@ class Table extends Commons {
 	protected $lastQuery;
 
 	/**
-	 * Columns to target the query
+	 * Columns to target in the query
 	 * @var Array|String
 	 */
 	protected $targetColumns;
+
+	/**
+	 * Columns to ignore in the query
+	 * @var Array|String
+	 */
+	protected $ignoreColumns;
 
 	/**
 	 * The query that serves to join results with referenced tables' rows
@@ -289,6 +295,12 @@ class Table extends Commons {
 	 * @var boolean
 	 */
 	private $lastInsertIds;
+
+	/**
+	 * Raw (array) result of the last select query
+	 * @var mixed
+	 */
+	private $rawResult;
 
 	/**
 	 * Class contructor
@@ -557,6 +569,15 @@ class Table extends Commons {
 		$return = $this->dropIndexes;
 		if ($reset) $this->dropIndexes = array();
 		return $return;
+	}
+
+	/**
+	 * Checks if the column exists
+	 * @param string $columnName
+	 * @return boolean
+	 */
+	public function hasColumn($columnName) {
+		return array_key_exists($columnName, $this->columns);
 	}
 
 	/**
@@ -883,15 +904,14 @@ class Table extends Commons {
 
 			if (count($rowArray) === 0)
 					throw new Exception('You cannot insert an empty row into table "' . $this->name . '"');
-
 			foreach ($rowArray as $column => &$value) {
-				if (empty($value) && $value != 0) continue;
 				$column = Util::camelTo_($column);
+				if ((empty($value) && $value != 0) || !$this->hasColumn($column)) continue;
 
 				if (!in_array($column, $columns)) $columns[] = $column;
 				$this->values[$ky][':' . $column] = $value;
 
-				if (!is_bool($pk) && $column === $pk) $pk = true;
+				if (!is_bool($pk) && $column === $pk && $value) $pk = true;
 			}
 		}
 
@@ -902,9 +922,7 @@ class Table extends Commons {
 
 		$this->multiple = true;
 		if ($pk !== TRUE) $this->lastInsertIds = true;
-		if ($this->delayExecute) {
-			return $this;
-		}
+		if ($this->delayExecute) return $this;
 
 		return $this->execute();
 	}
@@ -920,12 +938,14 @@ class Table extends Commons {
 		$relationships = array();
 		foreach ($this->references as $columnName => $info) {
 			if ($info['constraintName'] == 'PRIMARY' || $info['refTable'] != $table) continue;
-			$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, false);
+			$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships,
+							false);
 		}
 		foreach ($this->backReferences as $columnName => $infoArray) {
 			foreach ($infoArray as $info) {
 				if ($info['refTable'] != $table) continue;
-				$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, true);
+				$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships,
+							 true);
 			}
 		}
 		return $relationships[$table];
@@ -942,12 +962,14 @@ class Table extends Commons {
 		$relationships = array();
 		if ($info = $this->references[$columnName]) {
 			if ($info['constraintName'] != 'PRIMARY' && !empty($info['refTable'])) {
-				$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, false);
+				$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships,
+							 false);
 			}
 		}
 		if ($info = $this->backReferences[$columnName]) {
 			if (!empty($info['refTable'])) {
-				$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships, true);
+				$this->setupRelationship($columnName, $info['refColumn'], $info['refTable'], $relationships,
+							 true);
 			}
 		}
 
@@ -979,17 +1001,31 @@ class Table extends Commons {
 
 		foreach ($table->targetColumns as &$column) {
 			$column = Util::camelTo_(trim($column));
+			if (in_array($column, $table->ignoreColumns)) continue;
 			if ($return) $return .= ', ';
 
 			$return .= '`' . (($alias) ? $alias : $table->getName()) . '`.`' . $column . '`';
-			if ($this->joinings && !$ignoreJoins) {
-				$return .= ' as ' . Util::_toCamel($table->getName()) . '_' . Util::_toCamel($column);
+			if (count($this->joinings) && !$ignoreJoins) {
+				$return .= ' as ' . Util::_toCamel($table->getName()) . self::SEPARATOR . Util::_toCamel($column);
 			}
 			else if ($ignoreJoins) {
 				$return .= ' as ' . Util::_toCamel($column);
 			}
 		}
 		return $return;
+	}
+
+	/**
+	 * This ignores the query at the given columns
+	 * @param array|string $columns Array or comma-separated string of columns
+	 * @return Table
+	 */
+	public function ignoreColumns($columns) {
+		foreach (is_array($columns) ? $columns : explode(',', $columns) as $column) {
+			$this->ignoreColumns[] = Util::camelTo_($column);
+		}
+
+		return $this;
 	}
 
 	/**
@@ -1002,6 +1038,18 @@ class Table extends Commons {
 		return $this;
 	}
 
+	/**
+	 * Checks if specific columns are to be ignore
+	 * @return boolean
+	 */
+	public function hasIgnoreColumns() {
+		return !is_null($this->ignoreColumns);
+	}
+
+	/**
+	 * Checks if specific columns are being targeted
+	 * @return boolean
+	 */
 	public function hasTargetColumns() {
 		return !is_null($this->targetColumns);
 	}
@@ -1034,7 +1082,9 @@ class Table extends Commons {
 		$this->current = self::OP_SELECT;
 
 		$this->query = 'SELECT ' . $this->prepareColumns();
-		$this->query .= ' FROM `' . $this->name . '`';
+		$this->processJoins();
+		$this->query .= ' FROM `' . $this->name . '` ';
+		$this->query .= $this->joinQuery;
 
 		$this->where($criteria);
 
@@ -1068,7 +1118,8 @@ class Table extends Commons {
 	private function saveCache($result) {
 		if (!$result) return false;
 		$cache = DATA . 'select' . DIRECTORY_SEPARATOR . $this->encode($this->getName()) . '.php';
-		return Util::updateConfig($cache, array($this->encode($this->query . serialize($this->values)) => $this->encode(serialize($result))));
+		return Util::updateConfig($cache,
+							array($this->encode($this->query . serialize($this->values)) => $this->encode(serialize($result))));
 	}
 
 	/**
@@ -1209,66 +1260,86 @@ class Table extends Commons {
 		return $this;
 	}
 
-	private function returnSelect($rows) {
-		if (!is_array($rows)) {
-			$rows = array();
+	/**
+	 * Prepares the result of a select operation
+	 * 
+	 * @param array $result
+	 * @param int $expected constants RETURN_DEFAULT, RETURN_MODEL, RETURN_JSON, RETURN_DEFAULT_BOTH
+	 * @param \dbScribe\Row $rowModel
+	 * @return mixed
+	 */
+	final public function parseSelectResult($result, $expected = null, Row $rowModel = null) {
+		if (!is_array($result)) {
+			$result = array();
 		}
-		$forThis = array();
-		foreach ($rows as &$row) {
-			if ($this->joinQuery) {
-				foreach ($row as $col => $val) {
-					if (stristr($col, '__ds__')) {
-						$split = explode('__ds__', $col);
-						if ($this->expected === self::RETURN_MODEL) {
-							$row['joined'][$split[0]][$split[1]] = $val;
+		$rows = array();
+		$joining = false;
+		if ($expected) {
+			$rows = $result;
+			$joining = true;
+		}
+		else {
+			$expected = $this->expected;
+			foreach ($result as &$row) {
+				// Parse joined results
+				if ($this->joinQuery && $expected !== self::RETURN_MODEL) {
+					foreach ($row as $col => $val) {
+						if (stristr($col, self::SEPARATOR)) {
+							$split = explode(self::SEPARATOR, $col);
+							if ($expected === self::RETURN_MODEL) {
+								$_tableName = $split[0];
+								unset($split[0]);
+								// Join to allow further join breakdowns 
+								$_colName = join(self::SEPARATOR, $split);
+								$row[$_tableName][$_colName] = $val;
+							}
+							else {
+								$row[$split[0] . ucfirst($split[1])] = $val;
+							}
+							unset($row[$col]);
 						}
-						else {
-							$row[$split[0] . ucfirst($split[1])] = $val;
-						}
-						unset($row[$col]);
 					}
 				}
+				if ($this->resultKey && !empty($row[Util::_toCamel($this->resultKey)])) {
+					$rows[$row[Util::_toCamel($this->resultKey)]] = $row;
+				}
+				else if ($this->getPrimaryKey() && !empty($row[Util::_toCamel($this->getPrimaryKey())])) {
+					$rows[$row[Util::_toCamel($this->getPrimaryKey())]] = $row;
+				}
+				else $rows[] = $row;
 			}
-			if ($this->resultKey && !empty($row[Util::_toCamel($this->resultKey)])) {
-				$forThis[$row[Util::_toCamel($this->resultKey)]] = $row;
-			}
-			else if ($this->getPrimaryKey() && !empty($row[Util::_toCamel($this->getPrimaryKey())])) {
-				$forThis[$row[Util::_toCamel($this->getPrimaryKey())]] = $row;
-			}
-			else $forThis[] = $row;
 		}
-		switch ($this->expected) {
+		$this->rawResult = $rows;
+		switch ($expected) {
 			case self::RETURN_JSON:
-				$rows = json_encode($forThis);
+				$result = json_encode($rows);
 				break;
 			case self::RETURN_MODEL:
-				$rows = $this->createReturnModels($forThis);
+				$result = $this->createReturnModels($rows, $rowModel, !$joining);
 				break;
-			case self::RETURN_DEFAULT_BOTH:
-				foreach ($forThis as &$row) {
-					$row = array_merge($row, array_values($row));
-				}
 			case self::RETURN_DEFAULT:
-				$rows = $forThis;
+				$result = $rows;
 				break;
 		}
-		return $rows;
+		return $result;
 	}
 
-	private function createReturnModels(array $forThis) {
+	/**
+	 * Fetches the raw (array) result of the last select query
+	 * @return mixed
+	 */
+	final public function getRawResult() {
+		return $this->rawResult;
+	}
+
+	private function createReturnModels(array $forThis, $rowModel = null, $setTable = true) {
 		$rows = new ArrayCollection();
+
 		foreach ($forThis as $valueArray) {
-			$row = clone $this->rowModel;
-			if (isset($valueArray['joined'])) {
-				$row->__setJoined($valueArray['joined']);
-				unset($valueArray['joined']);
-			}
-			foreach ($valueArray as $name => $value) {
-				if (method_exists($row, 'set' . $name)) $row->{'set' . $name}($value);
-				else $row->{$name} = $value;
-			}
-			$row->postFetch();
-			$row->setTable($this);
+			$row = $rowModel ? clone $rowModel : clone $this->rowModel;
+			if ($setTable) $row->setTable($this);
+			else $row->setConnection($this->getConnection());
+			$row->__setup($valueArray)->postFetch();
 			$rows->append($row);
 		}
 
@@ -1284,7 +1355,8 @@ class Table extends Commons {
 	 * @return Table
 	 */
 	public function like($column, $value, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . strip_tags($value) . '"', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` LIKE "' . strip_tags($value) . '"',
+																					 $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1297,7 +1369,8 @@ class Table extends Commons {
 	 * @return Table
 	 */
 	public function notLike($column, $value, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT LIKE "' . strip_tags($value) . '"', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT LIKE "' . strip_tags($value) . '"',
+																						 $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1312,7 +1385,8 @@ class Table extends Commons {
 	public function lessThan($column, $value, $logicalAnd = true, $valueIsColumn = false) {
 		$value = $valueIsColumn ? '`:TBL:`.`' . \Util::camelTo_($value) . '`' :
 				'"' . $value . '"';
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` < ' . $value, $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` < ' . $value,
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1327,7 +1401,8 @@ class Table extends Commons {
 	public function lessThanOrEqualTo($column, $value, $logicalAnd = true, $valueIsColumn = false) {
 		$value = $valueIsColumn ? '`:TBL:`.`' . \Util::camelTo_($value) . '`' :
 				'"' . $value . '"';
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` <= ' . $value, $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` <= ' . $value,
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1342,7 +1417,8 @@ class Table extends Commons {
 	public function greaterThan($column, $value, $logicalAnd = true, $valueIsColumn = false) {
 		$value = $valueIsColumn ? '`:TBL:`.`' . \Util::camelTo_($value) . '`' :
 				'"' . $value . '"';
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` > ' . $value, $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` > ' . $value,
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1357,7 +1433,8 @@ class Table extends Commons {
 	public function greaterThanOrEqualTo($column, $value, $logicalAnd = true, $valueIsColumn = false) {
 		$value = $valueIsColumn ? '`:TBL:`.`' . \Util::camelTo_($value) . '`' :
 				'"' . $value . '"';
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` >= ' . $value, $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` >= ' . $value,
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1407,7 +1484,8 @@ class Table extends Commons {
 	 * @return Table
 	 */
 	public function regExp($column, $value, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` REGEXP "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` REGEXP "' . $value . '"',
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1419,7 +1497,8 @@ class Table extends Commons {
 	 * @return Table
 	 */
 	public function notRegExp($column, $value, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT REGEXP "' . $value . '"', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` NOT REGEXP "' . $value . '"',
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1441,7 +1520,8 @@ class Table extends Commons {
 	 * @return Table
 	 */
 	public function isNotNull($column, $logicalAnd = true) {
-		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IS NOT NULL', $logicalAnd ? 'AND' : 'OR');
+		$this->customWhere('`:TBL:`.`' . Util::camelTo_($column) . '` IS NOT NULL',
+												  $logicalAnd ? 'AND' : 'OR');
 		return $this;
 	}
 
@@ -1564,6 +1644,12 @@ class Table extends Commons {
 		return $this;
 	}
 
+	/**
+	 * Joins with a table that references the current table
+	 * @param string $tableName
+	 * @param string $columnName
+	 * @return \dbScribe\Table
+	 */
 	public function join($tableName, $columnName = null) {
 		$this->joinings['backward'][$tableName] = $columnName;
 		return $this;
@@ -1583,23 +1669,22 @@ class Table extends Commons {
 		$this->joinQuery = '';
 		$superStart = false;
 		foreach ($this->joinings['forward'] as $columnName => $options) {
+			throw new \Exception('Processing Forward Join. Attention needed in code');
 			if (NULL === $reference = $this->getReferences($columnName)) continue;
 			$tableName = str_replace($this->connection->getTablePrefix(), '', $reference['refTable']);
 			$refTable = $this->connection->table($tableName);
-			$this->query = stristr($this->query, ' from `' . $this->getName() . '`', true);
-			foreach ($refTable->getColumns(true) as $column) {
-				$this->query .= ', `' . $refTable->getName() . '`.`'
-						. Util::camelTo_($column) . '` as ' . Util::_toCamel($columnName) . '__ds__' . Util::_toCamel($column);
-			}
+			$this->query .= ', ' . $this->prepareColumns($refTable);
+//			foreach ($refTable->getColumns(true) as $column) {
+//				$this->query .= ', `' . $refTable->getName() . '`.`'
+//						. Util::camelTo_($column) . '` as ' . Util::_toCamel($columnName) . self::SEPARATOR . Util::_toCamel($column);
+//			}
 			if ($this->joinQuery) $this->joinQuery .= ' AND ';
 			$this->joinQuery .= ' LEFT JOIN `' . $refTable->getName() . '`'
 					. ' ON `' . $refTable->getName() . '`.`' . Util::camelTo_($reference['refColumn'])
 					. '` = `' . $this->getName() . '`.`' . Util::camelTo_($columnName) . '`';
 		}
+
 		foreach ($this->joinings['backward'] as $table => $options) {
-			$rel = $this->getColumnRelationships($table);
-			if (!count($rel)) continue;
-			die(var_dump('Table::processJoins()', $rel));
 			$relationships = $this->getTableRelationships($table);
 			if (!count($relationships)) continue;
 
@@ -1617,6 +1702,7 @@ class Table extends Commons {
 					(($table->getName() == $this->name) ? ' ' . $alias : null);
 
 			$started = false;
+			// Get connection variables
 			foreach ($relationships as $ky => $rel) {
 				if (($rel['backward'] && isset($options['forward']) && @$options['backward']) || (!$rel['backward'] && isset($options['forward']) &&
 						!$options['forward'])) continue;
@@ -1625,10 +1711,10 @@ class Table extends Commons {
 				if (!$started) $this->joinQuery .= ' ON ';
 				$started = true;
 				$superStart = true;
-				$this->joinQuery .= '`' . $this->name . '`.`' . $rel['column'] .
-						'` = ' . (($table->getName() == $this->name) ?
+				$this->joinQuery .=(($table->getName() == $this->name) ?
 								$alias : '`' . $table->getName() . '`') . '.`' .
-						$rel['refColumn'] . '` ';
+						$rel['refColumn'] . '` = `' . $this->name . '`.`' . $rel['column'] .
+						'`';
 
 				if (isset($options['where'])) {
 					foreach ($options['where'] as $column => $value) {
@@ -1639,11 +1725,8 @@ class Table extends Commons {
 			}
 		}
 
-//		die(var_dump($this->joinQuery, $this->query, $this->where));
-//		if ($this->joinQuery && !$superStart)
-//				throw new Exception('Joined table(s) must have something in common with the current table "' . $this->name . '"');
+//		die(var_dump($this->query, $this->joinQuery, $this->where));
 
-		if ($this->joinQuery) $this->query .= ' FROM `' . $this->getName() . '`';
 		return $this->joinQuery;
 	}
 
@@ -1657,7 +1740,8 @@ class Table extends Commons {
 	 */
 	private function parseWithOptions(array &$array, array $options) {
 		if (isset($options[0]['orderBy'])) {
-			usort($array, function($a, $b) use($options) {
+			usort($array,
+		 function($a, $b) use($options) {
 				if (is_array($options[0]['orderBy'])) {
 					foreach ($options[0]['orderBy'] as $order) {
 						$comp = is_array($order) ?
@@ -1713,14 +1797,16 @@ class Table extends Commons {
 	 */
 	private function checkModel($row, $preSave = false) {
 		if (!is_array($row) && !is_object($row))
-				throw new Exception('Each element of param $where must be an object of, or one that extends, "dbScribe\Row", or an array of [column => value]: ' . print_r($row, true));
+				throw new Exception('Each element of param $where must be an object of, or one that extends, "dbScribe\Row", or an array of [column => value]: ' . print_r($row,
+																																							   true));
 
 		if (empty($this->columns)) return array();
 
 		if (is_array($row)) {
 			return $row;
 		}
-		elseif (is_object($row) && get_class($row) === 'dbScribe\Row' || in_array('dbScribe\Row', class_parents($row))) {
+		elseif (is_object($row) && get_class($row) === 'dbScribe\Row' || in_array('dbScribe\Row',
+																			class_parents($row))) {
 			if ($preSave) {
 				$row->setConnection($this->connection);
 				$row->preSave();
@@ -1818,12 +1904,13 @@ class Table extends Commons {
 
 			$cnt = 1;
 			foreach ($rowArray as $column => &$value) {
-				if (empty($value) && $value != 0) continue;
+				$_column = $column;
+				$column = Util::camelTo_($column);
+				if ((empty($value) && $value != 0) || !$this->hasColumn($column)) continue;
 
-				if ($cnt > 1 && !in_array($column, $nColumns)) {
+				if ($cnt > 1 && !in_array($_column, $nColumns)) {
 					throw new Exception('All rows must have the same column names.');
 				}
-				$column = Util::camelTo_($column);
 
 				if ($this->getPrimaryKey() == $column) {
 					if (in_array($this->getPrimaryKey(), $whereColumn)) {
@@ -1906,9 +1993,8 @@ class Table extends Commons {
 			}
 
 			foreach ($rowArray as $column => &$value) {
-				if (empty($value) && $value != 0) continue;
-
 				$column = Util::camelTo_($column);
+				if ((empty($value) && $value != 0) || !$this->hasColumn($column)) continue;
 
 				if (!$ky && !in_array($column, $whereColumn)) {
 					if ($update) $update .= ', ';
@@ -1950,10 +2036,10 @@ class Table extends Commons {
 			$rowArray = $this->checkModel($row, false);
 			$cnt = 0;
 			foreach ($rowArray as $column => $value) {
-				if (!is_object($value) && $value === null) {
+				$column = Util::camelTo_($column);
+				if ((!is_object($value) && $value === null) || !$this->hasColumn($column)) {
 					continue;
 				}
-				$column = Util::camelTo_($column);
 
 				if ($cnt) $this->query .= ' AND ';
 
@@ -2011,14 +2097,15 @@ class Table extends Commons {
 		if (!$result) {
 			if ($this->preserveQueries && $this->current !== self::OP_SELECT) // keep all queries except selects
 					$this->doPreserveQueries();
-			$result = $this->connection->doPrepare($this->query, $this->values, array(
+			$result = $this->connection->doPrepare($this->query, $this->values,
+										  array(
 				'multipleRows' => $this->multiple,
 				'lastInsertIds' => $this->lastInsertIds,
 			));
 			if ($this->current === self::OP_SELECT) $this->saveCache($result);
 			else $this->removeCache();
 		}
-		if ($this->current === self::OP_SELECT) $result = $this->returnSelect($result);
+		if ($this->current === self::OP_SELECT) $result = $this->parseSelectResult($result);
 		$this->lastQuery = $this->getQuery(TRUE);
 		$this->resetQuery();
 		return $result;
@@ -2049,7 +2136,6 @@ class Table extends Commons {
 
 	public function createQuery() {
 		if ($this->genQry) return $this->query;
-		if ($this->current === self::OP_SELECT) $this->query .= $this->processJoins();
 
 		if (!empty($this->customWhere)) {
 			if ($this->where) {
@@ -2096,11 +2182,25 @@ class Table extends Commons {
 	 */
 	public function getQuery($withValues = false) {
 		if (!$withValues) return $this->createQuery();
-		$query = '';
+
 		$values = $this->getQueryValues();
-		foreach (explode('?', $this->createQuery()) as $k => $q) {
-			if ($k) $query .= '"' . $values[$k - 1] . '"';
-			$query .= $q;
+		$query = '';
+		$exp = explode('?', $this->createQuery());
+		if (count($exp) > 1) {
+			foreach ($exp as $k => $q) {
+				if ($k) $query .= '"' . $values[$k - 1] . '"';
+				$query .= $q;
+			}
+		}
+		else {
+			foreach ($values as $attr => $val) {
+				if (is_string($attr)) {
+					$query = str_replace(array_keys($values), array_values($values), $this->createQuery());
+					break;
+				}
+				if ($attr) $query .= '; ';
+				$query .= str_replace(array_keys($val), array_values($val), $this->createQuery());
+			}
 		}
 		return $query;
 	}

@@ -87,8 +87,8 @@ class Util extends Commons {
 		}
 
 		foreach ($array as $ky => $value) {
-			if (!is_array($value) && stristr($value, '__:DS:__')) {
-				$value = explode('__:DS:__', $value);
+			if (!is_array($value) && stristr($value, Mapper::ARRAY_COLLECTION_SEPARATOR)) {
+				$value = explode(Mapper::ARRAY_COLLECTION_SEPARATOR, $value);
 			}
 
 			if (is_array($value)) {
@@ -125,7 +125,8 @@ class Util extends Commons {
 				$configArray = array();
 			}
 		}
-		$config = ($recursiveMerge) ? array_replace_recursive($configArray, $data) : array_replace($configArray, $data);
+		$config = ($recursiveMerge) ? array_replace_recursive($configArray, $data) : array_replace($configArray,
+																							 $data);
 		$content = str_replace("=> \n", '=>', var_export($config, true));
 		return (file_put_contents($path, '<' . '?php' . "\r\n\treturn " . $content . ';') === FALSE) ? false : true;
 	}

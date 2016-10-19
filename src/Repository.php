@@ -219,16 +219,12 @@ class Repository extends Table {
 	 * @param array|Mapper $model a model or an array of models to delete
 	 * @return Repository
 	 */
-	public function delete($model) {
+	public function delete($model = null) {
 		if ($model) {
-			if (!is_array($model)) {
-				$model = array($model);
-			}
+			if (!is_array($model)) $model = array($model);
 			return parent::delete($model);
 		}
-		else {
-			return parent::delete();
-		}
+		else return parent::delete();
 		return $this;
 	}
 

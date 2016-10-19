@@ -10,8 +10,22 @@ namespace dbScribe;
  */
 class Row extends Commons implements \JsonSerializable {
 
+	/**
+	 * The connection object
+	 * @var Connection
+	 */
 	private $__connection;
+
+	/**
+	 * Array of row values as extracted from the database
+	 * @var array
+	 */
 	private $__content;
+
+	/**
+	 * Array of joined table values
+	 * @var array
+	 */
 	private $__joined;
 
 	/**
@@ -67,6 +81,24 @@ class Row extends Commons implements \JsonSerializable {
 		return $this;
 	}
 
+	final public function __setup(array $data) {
+		$joined = array();
+		foreach ($data as $name => $value) {
+			if (method_exists($this, 'set' . $name)) $this->{'set' . $name}($value);
+			else if (stristr($name, Table::SEPARATOR)) { // is a joined value
+				$split = explode(Table::SEPARATOR, $name);
+				$_tableName = $split[0];
+				unset($split[0]);
+				// Join to allow further join breakdowns 
+				$_colName = join(Table::SEPARATOR, $split);
+				$joined[$_tableName][0][$_colName] = $value;
+			}
+			else $this->{$name} = $value;
+		}
+		if (count($joined)) $this->__setJoined($joined);
+		return $this;
+	}
+
 	/**
 	 * Sets the fetched joined values for the row
 	 * @param array $joined
@@ -82,8 +114,36 @@ class Row extends Commons implements \JsonSerializable {
 	 * @param string $column The column for which to get joined values
 	 * @return array|null
 	 */
-	final private function __getJoined($column = null) {
+	final protected function __getJoined($column = null) {
 		return $column ? $this->__joined[$column] : $this->__joined;
+	}
+
+	/**
+	 * Checks whether the given table data is joined
+	 * @param string $tableName
+	 * @return boolean
+	 */
+	final protected function isJoined($tableName) {
+		return is_array($this->__joined) && array_key_exists($tableName, $this->__joined);
+	}
+
+	/**
+	 * Sets the default row values as obtained from the database
+	 * @param array $__content
+	 * @return \dbScribe\Row
+	 */
+	final public function __setContent(array $__content) {
+		$this->__content = $__content;
+		return $this;
+	}
+
+	/**
+	 * Checks if a property exists in the model
+	 * @param string $propertyName
+	 * @return boolean
+	 */
+	public function hasProperty($propertyName) {
+		return property_exists($this, $propertyName);
 	}
 
 	/**
@@ -138,6 +198,7 @@ class Row extends Commons implements \JsonSerializable {
 	final public function __set($property, $value) {
 		if (in_array($property, array('__connection', '__content', '__tableName', '__table', '__joinings')))
 				throw new \Exception('Property "' . $property . '" is reserved.');
+		$this->{$property} = $value;
 		$this->_set($property, $value);
 	}
 
@@ -148,8 +209,7 @@ class Row extends Commons implements \JsonSerializable {
 	 * @return \dbScribe\Row
 	 */
 	protected function _set($property, $value) {
-		$this->{$property} = $value;
-		return $this;
+		
 	}
 
 	/**
@@ -165,8 +225,9 @@ class Row extends Commons implements \JsonSerializable {
 	 * @return null
 	 */
 	final public function __call($name, $args) {
-		if (substr(strtolower($name), 0, 3) === 'set' && !method_exists($this, $name)) {
-			$property = substr($name, 3);
+		// magic set and get methods
+		$property = substr($name, 3);
+		if (substr(strtolower($name), 0, 3) === 'set') {
 			if (!property_exists($this, $property)) $property = lcfirst($property);
 			if (!property_exists($this, $property)) $property = Util::_toCamel($property);
 			if (!property_exists($this, $property)) $property = Util::camelTo_($property);
@@ -175,72 +236,122 @@ class Row extends Commons implements \JsonSerializable {
 				return $this;
 			}
 		}
-		if (!$this->__connection && $this->__table) {
-			$this->__connection = $this->__table->getConnection();
+		else if (substr(strtolower($name), 0, 3) === 'get') {
+			if (!property_exists($this, $property)) $property = lcfirst($property);
+			if (!property_exists($this, $property)) $property = Util::_toCamel($property);
+			if (!property_exists($this, $property)) $property = Util::camelTo_($property);
+			if (property_exists($this, $property)) return $this->{$property};
 		}
-		else if (!$this->__table && $this->__connection) {
-			$this->__table = $this->__connection->table($this->getTableName(), $this);
+		unset($property);
+
+		// handle referencing
+
+		if ($this->getTable() && !$this->__connection) {
+			$this->setConnection($this->__table->getConnection());
 		}
 		else if (!$this->__connection && !$this->__table) {
 			return new ArrayCollection;
 		}
 
-		$return = $this->__getJoined($name);
-		if (NULL !== ($ret = $this->_preCall($name, $args, $return))) {
+		// Check if already eager loaded
+		$result = $this->__getJoined($name);
+		if (NULL !== ($ret = $this->_preCall($name, $args, $result))) {
 			return $ret;
 		}
-		if ($return && !isset($args[0]['returnType']) || $args[0]['returnType'] == Table::RETURN_MODEL) {
-			if ($return && $args[0]['rowModel']) $return = $args[0]['rowModel']->populate($return);
-			else {
-				$row = new Row();
-				$return = $row->populate($return);
-			}
+		if ($result) {
+			// parse result into the expected type
+			$result = $this->__table
+					->parseSelectResult($result, $args[0]['returnType'], $args[0]['rowModel']);
 		}
-
-		$relTable = null;
-		// Not using Mapper class, therefore $name is table
-		if (!$args[0]['rowModel'] && $relationships = $this->__table->getTableRelationships($name)) {
-			foreach ($relationships as $relationship) {
-				$column = Util::_toCamel($relationship['column']);
-				if (isset($args[0]['backward']) && $args[0]['backward'] &&
-						!$relationship['backward'] || isset($args[0]['forward']) &&
-						$args[0]['forward'] && $relationship['backward']) continue;
-				if (property_exists($this, $column)) {
-					$this->getRelTableWhere($args, $relationship['refColumn'], $this->{$column});
-				}
-			}
-			$relTable = $this->__connection->table(Util::camelTo_($name));
-		}
+		// select from required table since not eager joined
 		else {
-			if (!is_object($args[0]['rowModel'])) $relTable = $this->__connection->table($name);
-			else $relTable = $args[0]['rowModel']->getTable();
-		}
+			$relTable = null;
+			// Not a column, therefore $name is table
+			if (!in_array($name, $this->__table->getColumns(true)) &&
+					$relationships = $this->__table->getTableRelationships($name)) {
+				foreach ($relationships as $relationship) {
+					$column = Util::_toCamel($relationship['column']);
+					if (isset($args[0]['backward']) && $args[0]['backward'] &&
+							!$relationship['backward'] || isset($args[0]['forward']) &&
+							$args[0]['forward'] && $relationship['backward']) continue;
+					if (property_exists($this, $column)) {
+						$args[0]['where'] = $this->getRelTableWhere($args, $relationship['refColumn'],
+												  $this->{$column});
+						break;
+					}
+				}
+				$relTable = $this->__connection->table(Util::camelTo_($name));
+			}
+			else {
+				if (!is_object($args[0]['rowModel'])) $relTable = $this->__connection->table($name);
+				else $relTable = $args[0]['rowModel']->getTable();
+			}
 
-		if (!$return && !count($args[0]['where']) && !count($args[0]['in'])) // Ensure that not all rows are returned
+			if (!count($args[0]['where']) && !count($args[0]['in']))
+			// Ensure that not all rows are returned
 				return new ArrayCollection;
-		// select from required table if not joined
-		if (!$return) {
 			$relTable->setRowModel($this->getRelTableModel($args))
 					->setExpectedResult(isset($args[0]['returnType']) ?
 									$args[0]['returnType'] : Table::RETURN_MODEL);
-			$return = $this->prepSelectRelTable($relTable, $args);
-			if (is_object($return) && is_a($return, get_class($relTable))) {
-				$return = $return->select();
+			$result = $this->prepSelectRelTable($relTable, $args);
+			if (is_object($result) && is_a($result, get_class($relTable))) {
+				$result = $result->select();
 			}
-			if (is_bool($return)) return new ArrayCollection;
-			else if (is_a($return, get_class($relTable))) $return = $return->execute();
+			if (is_bool($result)) {
+				switch ($args[0]['returnType']) {
+					case Table::RETURN_DEFAULT: return array();
+					case Table::RETURN_MODEL: return new ArrayCollection();
+					case Table::RETURN_JSON: return json_encode(array());
+				}
+			}
+			else if (is_a($result, get_class($relTable))) $result = $result->execute();
+			$this->__setJoined(array(
+				$name => $relTable->getRawResult(),
+			));
 		}
-		return $return;
+
+
+		return $result;
 	}
 
 	/**
 	 * Called before using the magic method __call()
-	 * @param type $name
+	 * @param type $property
 	 * @param array $args
 	 * @param array|null $joined Found joined values
 	 */
-	protected function _preCall(&$name, array &$args, $joined = null) {
-		
+	protected function _preCall($name, array & $args, $joined = null) {
+		if (!method_exists($this, $name)) {
+			if (!property_exists($this, $name)) {
+				$property = lcfirst($property);
+				if (!property_exists($this, $property)) $property = Util::_toCamel($property);
+				if (!property_exists($this, $property)) $property = Util::camelTo_($property);
+			}
+			else $property = $name;
+			// join
+
+			if (!$joined && (($property && $this->{$property}) || $this->{$name})) {
+				// $name is column and exists
+				if ($ref = $this->__table->getReferences($name)) {
+					$column = $ref['refColumn'];
+					if (array_key_exists('where', $args[0])) {
+						foreach ($args[0]['where'] as &$array) {
+							$array[$column] = is_array($this->$property) ?
+									$this->{$property}[0] : $this->$property;
+						}
+					}
+					else {
+						$args[0]['where'][] = array($column => is_array($this->$property) ?
+									$this->{$property}[0] : $this->$property);
+					}
+				}
+			}
+			// reset set model
+			if (isset($args[0]['model'])) {
+				$args[0]['rowModel'] = $args[0]['model'];
+				unset($args[0]['model']);
+			}
+		}
 	}
 
 	/**
@@ -249,7 +360,7 @@ class Row extends Commons implements \JsonSerializable {
 	 * @param array $callArgs
 	 * @return \dbScribe\Table
 	 */
-	private function prepSelectRelTable(Table &$relTable, array $callArgs) {
+	private function prepSelectRelTable(Table & $relTable, array $callArgs) {
 		foreach ($callArgs[0] as $method => $args) {
 			if (!method_exists($relTable, $method)) $method = 'set' . ucfirst($method);
 			if (method_exists($relTable, $method)) {
@@ -282,14 +393,14 @@ class Row extends Commons implements \JsonSerializable {
 	 * @return array
 	 * @throws \Exception
 	 */
-	private function getRelTableWhere(array &$callArgs, $column, $value) {
+	private function getRelTableWhere(array & $callArgs, $column, $value) {
 		$where = array();
 
-		if (!isset($callArgs[0]) || (isset($callArgs[0]) && !is_array($callArgs[0])) || (isset($callArgs[0]) &&
-				is_array($callArgs[0]) && !isset($callArgs[0]['where']))) {
+		if (!isset($callArgs [0]) || (isset($callArgs [0]) && !is_array($callArgs[0])) || (isset($callArgs [0]) &&
+				is_array($callArgs [0]) && !isset($callArgs[0]['where']))) {
 			$where[] = array($column => $value);
 		}
-		else if ((isset($callArgs[0]) && is_array($callArgs[0]) && isset($callArgs[0]['where']))) {
+		else if ((isset($callArgs [0]) && is_array($callArgs [0]) && isset($callArgs[0]['where']))) {
 			if (is_array($callArgs[0]['where'])) {
 				foreach ($callArgs[0]['where'] as $row) {
 					if (is_object($row)) {
@@ -345,7 +456,7 @@ class Row extends Commons implements \JsonSerializable {
 	 * @param string $property Property to act on
 	 */
 	public function postFetch($property = null) {
-		$this->__content = $this->toArray(true, true);
+		$this->__setContent($this->toArray());
 	}
 
 	/**
@@ -365,7 +476,10 @@ class Row extends Commons implements \JsonSerializable {
 	 */
 	final public function getOldValue($property) {
 		return array_key_exists($property, $this->__content) ?
-				$this->__content[$property] : $this->{$property};
+				$this->__content[$property] : $this->{$property
+				}
+
+		;
 	}
 
 	final public function setTable(Table $table) {
@@ -388,7 +502,7 @@ class Row extends Commons implements \JsonSerializable {
 	 * @return array
 	 */
 	public function jsonSerialize() {
-		return $this->toArray(true, true);
+		return $this->toArray();
 	}
 
 	/**
@@ -430,8 +544,8 @@ class Row extends Commons implements \JsonSerializable {
 	}
 
 	private function arrayHasChanged($property, array $value) {
-		if (!is_array($this->{$property})) return true;
-		return Util::arrayDiff($this->{$property}, $value);
+		if (!is_array($this->{$property })) return true;
+		return Util::arrayDiff($this->{ $property}, $value);
 	}
 
 }
