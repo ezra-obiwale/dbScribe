@@ -17,18 +17,6 @@ class Row extends Commons implements \JsonSerializable {
 	private $__connection;
 
 	/**
-	 * Array of row values as extracted from the database
-	 * @var array
-	 */
-	private $__content;
-
-	/**
-	 * Array of joined table values
-	 * @var array
-	 */
-	private $__joined;
-
-	/**
 	 *
 	 * @var \dbScribe\Table
 	 */
@@ -38,7 +26,19 @@ class Row extends Commons implements \JsonSerializable {
 	 * Name of the table to attach model to
 	 * @var string|null
 	 */
-	private $__tableName;
+	protected $__tableName;
+
+	/**
+	 * Array of row values as extracted from the database
+	 * @var array
+	 */
+	protected $__content;
+
+	/**
+	 * Array of joined table values
+	 * @var array
+	 */
+	protected $__joined;
 
 	/**
 	 * Sets the name of the table to attach model to
@@ -104,7 +104,7 @@ class Row extends Commons implements \JsonSerializable {
 	 * @param array $joined
 	 * @return \dbScribe\Row
 	 */
-	final public function __setJoined(array $joined) {
+	private function __setJoined(array $joined) {
 		$this->__joined = $joined;
 		return $this;
 	}
@@ -245,7 +245,6 @@ class Row extends Commons implements \JsonSerializable {
 		unset($property);
 
 		// handle referencing
-
 		if ($this->getTable() && !$this->__connection) {
 			$this->setConnection($this->__table->getConnection());
 		}
@@ -309,7 +308,6 @@ class Row extends Commons implements \JsonSerializable {
 				$name => $relTable->getRawResult(),
 			));
 		}
-
 
 		return $result;
 	}
@@ -441,14 +439,13 @@ class Row extends Commons implements \JsonSerializable {
 	}
 
 	/**
-	 * This is called after inserts and updates and expects a return of the model id.
-	 * @param mixed $lastInsertId
-	 * @param int $lastInsertId either dbScribe\Table::OP_INSERT or dbScribe\Table::OP_UPDATE
+	 * This is called after inserts and updates.
+	 * @param int $operation either dbScribe\Table::OP_INSERT or dbScribe\Table::OP_UPDATE
 	 * @param mixed $result Result of the operation
-	 * @return mixed Id of the model
+	 * @return void
 	 */
-	public function postSave($operation, $result, $lastInsertId) {
-		return $lastInsertId;
+	public function postSave($operation, $result) {
+		
 	}
 
 	/**
@@ -544,8 +541,16 @@ class Row extends Commons implements \JsonSerializable {
 	}
 
 	private function arrayHasChanged($property, array $value) {
-		if (!is_array($this->{$property })) return true;
-		return Util::arrayDiff($this->{ $property}, $value);
+		if (!is_array($this->{$property})) return true;
+		return Util::arrayDiff($this->{$property}, $value);
+	}
+
+	/**
+	 * Serializes only the properties of the model
+	 * @return array
+	 */
+	public function __sleep() {
+		return array_keys(get_object_vars($this));
 	}
 
 }

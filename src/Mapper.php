@@ -2,11 +2,10 @@
 
 namespace dbScribe;
 
-use dbScribe\ArrayCollection,
+use dbScribe\Annotation,
 	dbScribe\Row,
 	dbScribe\Table,
 	dbScribe\Util,
-	dbScribe\Annotation,
 	Exception;
 
 /**
@@ -21,7 +20,7 @@ abstract class Mapper extends Row {
 
 	/**
 	 *
-	 * @var \dbScribe\Annotation
+	 * @var Annotation
 	 */
 	private $__annotations;
 	private $__settings;
@@ -270,11 +269,10 @@ abstract class Mapper extends Row {
 	 */
 	private function parseAttributes($columnName, array $attrs, $isCreate = true) {
 		$return = $this->checkType($attrs); // type
-//		if (strtolower($attrs['type']) === 'timestamp' && !isset($attrs['attrs']['default'])) {
-//			$attrs['attrs']['default'] = '0000-00-00 00:00:00';
-//		}
 
 		if (isset($attrs['attrs']['size'])) $return .= '(' . $attrs['attrs']['size'] . ')'; // size
+
+		$return .= (isset($attrs['attrs']['nullable']) && strtolower($attrs['attrs']['nullable']) == 'true') ? ' NULL' : ' NOT NULL'; // null
 
 		if (isset($attrs['attrs']['collation'])) {
 			if (!isset($attrs['attrs']['charset']))
@@ -282,8 +280,6 @@ abstract class Mapper extends Row {
 
 			$return .= ' CHARACTER SET ' . $attrs['attrs']['charset'] . ' COLLATE ' . $attrs['attrs']['collation'];
 		}
-
-		$return .= (isset($attrs['attrs']['nullable']) && strtolower($attrs['attrs']['nullable']) == 'true') ? ' NULL' : ' NOT NULL'; // null
 
 		if (isset($attrs['attrs']['default'])) { // auto increment
 			if (strtolower($attrs['type']) === 'boolean') {
@@ -981,7 +977,7 @@ abstract class Mapper extends Row {
 	 * @param array $annotations
 	 */
 	private function save($path, $annotations) {
-		if (!is_dir(DATA . 'mapper')) mkdir(DATA . 'mapper', 0755, TRUE);
+		if (!is_dir(dirname($path))) mkdir(dirname($path), 0755, TRUE);
 
 		$content = var_export($annotations, true);
 		file_put_contents($path,
@@ -1034,7 +1030,7 @@ abstract class Mapper extends Row {
 	 */
 	public function preSave() {
 		$this->getCachedSettings();
-		foreach ($this->toArray() as $ppt => $val) {
+		foreach ($this->toArray(true, true) as $ppt => $val) {
 			$settingKey = \Util::_toCamel($ppt);
 			$setting = $this->__settings[$settingKey];
 			if (!$setting) continue;
@@ -1051,12 +1047,13 @@ abstract class Mapper extends Row {
 																						 '0000')) {
 				$this->$settingKey = Util::createTimestamp(strtotime($val), 'Y-m-d H:i:s');
 			}
-			elseif (strtolower(trim($setting['type'])) === 'array' && $val) {
-				$this->$settingKey = json_encode($val);
+			elseif (strtolower(trim($setting['type'])) === 'array') {
+				if ($ppt === 'access_rules') die('got access_rules');
+				$this->$settingKey = json_encode($val ? $val : array());
 			}
 			$val = $this->$settingKey;
 
-			if (empty($val) && $val != 0) {
+			if (empty($val) && $val != 0 && !is_array($val)) {
 				if (!property_exists($this, $ppt)) $ppt = Util::_toCamel($ppt);
 				$this->$ppt = null;
 			}
@@ -1126,14 +1123,6 @@ abstract class Mapper extends Row {
 	 */
 	protected function _set($property, $value) {
 		
-	}
-
-	/**
-	 * Serializes only the properties of the model
-	 * @return type
-	 */
-	public function __sleep() {
-		return array_keys($this->toArray(false, true));
 	}
 
 	/**

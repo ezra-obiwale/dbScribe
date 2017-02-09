@@ -261,10 +261,6 @@ class Connection extends \PDO {
 		$alter = 'ALTER TABLE `' . $this->getDBName() . '`.`' . $table->getName() . '`';
 		$qry = '';
 
-		if ($table->getNewDescription()) {
-			$qry .= $alter . ' ' . $table->getNewDescription(true) . ';';
-		}
-
 		if (count($table->getDropReferences())) {
 			$qry .= ' ';
 			$cnt = 1;
@@ -276,6 +272,25 @@ class Connection extends \PDO {
 				}
 				$cnt++;
 			}
+		}
+		
+		if (count($table->getDropIndexes())) {
+			$qry .= $alter;
+			$cnt = 1;
+			$iQry = '';
+			foreach ($table->getDropIndexes(true) as $column) {
+				if (array_key_exists($column, $table->getIndexes())) {
+					if ($iQry) $iQry .= ',';
+					$iQry .= ' DROP INDEX `' . $table->getIndexes($column) . '`';
+				}
+				$cnt++;
+			}
+
+			$qry .= $iQry . ';';
+		}
+
+		if ($table->getNewDescription()) {
+			$qry .= $alter . ' ' . $table->getNewDescription(true) . ';';
 		}
 
 		$dropColumns = $table->getDropColumns(true);
@@ -302,7 +317,6 @@ class Connection extends \PDO {
 			$qry .= $this->addNewColumns($table->getNewColumns(true), $table, $dropColumns);
 			$qry .= ';';
 		}
-
 
 		if (count($table->getAlterColumns())) {
 			$query = ' ' . $alter;
@@ -350,21 +364,6 @@ class Connection extends \PDO {
 			}
 
 			$qry .= ';';
-		}
-
-		if (count($table->getDropIndexes())) {
-			$qry .= $alter;
-			$cnt = 1;
-			$iQry = '';
-			foreach ($table->getDropIndexes(true) as $column) {
-				if (array_key_exists($column, $table->getIndexes())) {
-					if ($iQry) $iQry .= ',';
-					$iQry .= ' DROP INDEX `' . $table->getIndexes($column) . '`';
-				}
-				$cnt++;
-			}
-
-			$qry .= $iQry . ';';
 		}
 
 		if ($table->getNewPrimaryKey()) {

@@ -195,4 +195,13 @@ class Util extends Commons {
 		return array_merge($diff, $array1);
 	}
 
+	/**
+	 * Encodes the given string
+	 * @param string $string
+	 * @return string
+	 */
+	public static function encode($string) {
+		return base64_encode($string);
+	}
+	
 }
